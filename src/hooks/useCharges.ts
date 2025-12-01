@@ -284,10 +284,10 @@ export const useCharges = (
 
       // Validate based on field type
       if (field === 'fixedAmount' && cardData.currency === 'INR' && cardData.mode === 'FIXED') {
-        error = validateFixedAmount(cardData.fixedAmount);
+        error = validateFixedAmount(cardData.fixedAmount, cardName === 'handlingCharges');
       } else if (field === 'weightThreshold') {
-        // Only validate weightThreshold for handlingCharges
-        if (cardName === 'handlingCharges' && cardData.weightThreshold !== undefined) {
+        // Only validate weightThreshold for handlingCharges - it's MANDATORY
+        if (cardName === 'handlingCharges') {
           error = validateWeightThreshold(cardData.weightThreshold);
         }
       }
@@ -388,9 +388,10 @@ export const useCharges = (
       const cardData = charges[cardName] as ChargeCardData;
       // Only validate weightThreshold for handlingCharges
       const shouldValidateWeight = cardName === 'handlingCharges';
+      const isHandlingCharge = cardName === 'handlingCharges';
 
       // run the existing validator first
-      let cardErrors = validateChargeCard(cardData, shouldValidateWeight) || {};
+      let cardErrors = validateChargeCard(cardData, shouldValidateWeight, isHandlingCharge) || {};
 
       // If the card is VARIABLE % (currency PERCENT + mode VARIABLE), allow numeric values
       try {

@@ -45,9 +45,11 @@ export interface ChargeCardData {
 /**
  * Validate fixed amount (when currency = INR and mode = FIXED)
  * Range: 1-5000 inclusive
+ * For handling charges: ALWAYS mandatory
  */
-export const validateFixedAmount = (value: number): string => {
-  if (value === null || value === undefined || isNaN(value)) {
+export const validateFixedAmount = (value: number, isHandlingCharge: boolean = false): string => {
+  // For handling charges, it's MANDATORY (no special treatment)
+  if (value === null || value === undefined || isNaN(value) || value === 0) {
     return 'This field is required';
   }
   if (value < 1 || value > 5000) {
@@ -71,12 +73,12 @@ export const validateVariableRange = (value: string): string => {
 };
 
 /**
- * Validate weight threshold
+ * Validate weight threshold (MANDATORY for handling charges)
  * Range: 1-20000 inclusive
  */
 export const validateWeightThreshold = (value: number): string => {
-  if (value === null || value === undefined || isNaN(value)) {
-    return 'This field is required';
+  if (value === null || value === undefined || isNaN(value) || value === 0) {
+    return 'Weight threshold is required for handling charges';
   }
   if (value < 1 || value > 20000) {
     return 'Enter amount between 1-20,000';
@@ -101,8 +103,13 @@ export const validateUnit = (value: string): string => {
  * Validate complete charge card data
  * @param data - Charge card data
  * @param validateWeight - Whether to validate weight threshold (only for handlingCharges)
+ * @param isHandlingCharge - Whether this is a handling charge (affects validation)
  */
-export const validateChargeCard = (data: ChargeCardData, validateWeight: boolean = false): Record<string, string> => {
+export const validateChargeCard = (
+  data: ChargeCardData, 
+  validateWeight: boolean = false,
+  isHandlingCharge: boolean = false
+): Record<string, string> => {
   const errors: Record<string, string> = {};
 
   // Validate unit
@@ -112,7 +119,7 @@ export const validateChargeCard = (data: ChargeCardData, validateWeight: boolean
   // Validate based on currency and mode
   if (data.currency === 'INR') {
     if (data.mode === 'FIXED') {
-      const fixedError = validateFixedAmount(data.fixedAmount);
+      const fixedError = validateFixedAmount(data.fixedAmount, isHandlingCharge);
       if (fixedError) errors.fixedAmount = fixedError;
     } else {
       const variableError = validateVariableRange(data.variableRange);
@@ -124,8 +131,8 @@ export const validateChargeCard = (data: ChargeCardData, validateWeight: boolean
     if (variableError) errors.variableRange = variableError;
   }
 
-  // Validate weight threshold (only if validateWeight is true, i.e., for handlingCharges)
-  if (validateWeight && data.weightThreshold !== undefined) {
+  // Validate weight threshold (MANDATORY if validateWeight is true, i.e., for handlingCharges)
+  if (validateWeight) {
     const weightError = validateWeightThreshold(data.weightThreshold);
     if (weightError) errors.weightThreshold = weightError;
   }

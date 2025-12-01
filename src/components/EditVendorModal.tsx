@@ -1097,7 +1097,7 @@ const EditVendorModal: React.FC<EditVendorModalProps> = ({ vendor, onClose, onSa
                 {/* Sub Vendor */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Sub Vendor <span className="text-red-500">*</span>
+                    Sub Vendor
                   </label>
                   <input
                     type="text"
@@ -1109,8 +1109,7 @@ const EditVendorModal: React.FC<EditVendorModalProps> = ({ vendor, onClose, onSa
                     maxLength={20}
                     className={`mt-1 block w-full border rounded-lg shadow-sm px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 transition bg-slate-50/70
                       ${errors.subVendor ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'}`}
-                    placeholder="Enter sub vendor"
-                    required
+                    placeholder="Enter sub vendor (optional)"
                   />
                   {errors.subVendor && <p className="mt-1 text-xs text-red-600">{errors.subVendor}</p>}
                 </div>
@@ -1118,7 +1117,7 @@ const EditVendorModal: React.FC<EditVendorModalProps> = ({ vendor, onClose, onSa
                 {/* Vendor Code */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                    Vendor Code <span className="text-red-500">*</span>
+                    Vendor Code
                   </label>
                   <input
                     type="text"
@@ -1130,8 +1129,7 @@ const EditVendorModal: React.FC<EditVendorModalProps> = ({ vendor, onClose, onSa
                     maxLength={20}
                     className={`mt-1 block w-full border rounded-lg shadow-sm px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 transition bg-slate-50/70
                       ${errors.vendorCode ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'}`}
-                    placeholder="Enter vendor code"
-                    required
+                    placeholder="Enter vendor code (optional)"
                   />
                   {errors.vendorCode && <p className="mt-1 text-xs text-red-600">{errors.vendorCode}</p>}
                 </div>
@@ -1256,17 +1254,19 @@ const EditVendorModal: React.FC<EditVendorModalProps> = ({ vendor, onClose, onSa
                       type="range"
                       min={1}
                       max={5}
-                      step={1}
+                      step={0.1}
                       value={formData.basics.companyRating}
                       onChange={(e) => setBasicField('companyRating', Number(e.target.value))}
                       className="w-full accent-blue-600"
                     />
                     <div className="flex items-center justify-between mt-1">
-                      <span className="text-xs text-slate-500">1</span>
-                      <span className="text-sm font-semibold text-slate-800">
-                        {formData.basics.companyRating} / 5
+                      <span className="text-xs text-slate-500">1.0</span>
+                      <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-md">
+                        {typeof formData.basics.companyRating === 'number'
+                          ? formData.basics.companyRating.toFixed(1)
+                          : '4.0'} / 5.0
                       </span>
-                      <span className="text-xs text-slate-500">5</span>
+                      <span className="text-xs text-slate-500">5.0</span>
                     </div>
                   </div>
                 </div>

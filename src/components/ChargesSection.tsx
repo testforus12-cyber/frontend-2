@@ -44,6 +44,7 @@ interface ChargesSectionProps {
 /**
  * Keep only digits and at most one dot. Remove leading zeros (but keep single '0').
  * Return a normalized string with at most `precision` decimal places.
+ * If integerOnly is true, only accept whole numbers (no decimals)
  */
 
 const displayZeroAsBlank = (
@@ -55,10 +56,20 @@ const displayZeroAsBlank = (
   return String(val);
 };
 
-function sanitizeDecimalString(raw: string, precision = 2) {
+function sanitizeDecimalString(raw: string, precision = 2, integerOnly = false) {
   if (!raw) return '';
   let s = String(raw).trim();
   s = s.replace(/,/g, '');
+  
+  if (integerOnly) {
+    // Only allow digits, no decimal point
+    s = s.replace(/[^\d]/g, '');
+    // Remove leading zeros but keep single '0'
+    s = s.replace(/^0+([1-9])/, '$1');
+    if (s === '') return '';
+    return s;
+  }
+  
   s = s.replace(/[^\d.]/g, '');
 
   const parts = s.split('.');
@@ -116,6 +127,7 @@ interface SimpleChargeFieldProps {
   maxLength?: number;
   precision?: number;
   required?: boolean;
+  integerOnly?: boolean; // NEW: only allow whole numbers
 }
 
 const SimpleChargeField: React.FC<SimpleChargeFieldProps> = ({
@@ -131,14 +143,27 @@ const SimpleChargeField: React.FC<SimpleChargeFieldProps> = ({
   maxLength,
   precision = 2,
   required = false,
+  integerOnly = false, // NEW
 }) => {
     const displayed = displayZeroAsBlank(value);
 
 
   const handleTextChange = (raw: string) => {
-    const clamped = clampDecimalString(raw, min, max, precision);
-    const out = clamped === '' ? 0 : Number(clamped);
-    onChange(out);
+    const sanitized = sanitizeDecimalString(raw, precision, integerOnly);
+    if (!sanitized) {
+      onChange(0);
+      return;
+    }
+    
+    const num = Number(sanitized);
+    if (!Number.isFinite(num)) {
+      onChange(0);
+      return;
+    }
+    
+    // Clamp to [min, max]
+    const clamped = Math.min(Math.max(num, min), max);
+    onChange(clamped);
   };
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,8 +324,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="₹"
           max={CHARGE_MAX}
           maxLength={10}
-          precision={2}
+          precision={0}
           required={true}
+          integerOnly={true}
         />
 
         <SimpleChargeField
@@ -313,8 +339,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="KG"
           max={CHARGE_MAX}
           maxLength={7}
-          precision={3}
-          required={true}
+          precision={0}
+          required={false}
+          integerOnly={true}
         />
 
         <SimpleChargeField
@@ -327,8 +354,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="₹"
           max={CHARGE_MAX}
           maxLength={10}
-          precision={2}
-          required={true}
+          precision={0}
+          required={false}
+          integerOnly={true}
         />
 
         {/* ═══════════════════════════════════════════════════════════════ */}
@@ -345,8 +373,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="₹"
           max={CHARGE_MAX}
           maxLength={10}
-          precision={2}
-          required={true}
+          precision={0}
+          required={false}
+          integerOnly={true}
         />
 
         <SimpleChargeField
@@ -359,8 +388,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="₹"
           max={CHARGE_MAX}
           maxLength={10}
-          precision={2}
-          required={true}
+          precision={0}
+          required={false}
+          integerOnly={true}
         />
 
         <SimpleChargeField
@@ -373,8 +403,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="₹"
           max={CHARGE_MAX}
           maxLength={10}
-          precision={2}
-          required={true}
+          precision={0}
+          required={false}
+          integerOnly={true}
         />
 
         {/* ═══════════════════════════════════════════════════════════════ */}
@@ -490,8 +521,9 @@ export const ChargesSection: React.FC<ChargesSectionProps> = ({ charges }) => {
           suffix="₹"
           max={10000}
           maxLength={10}
-          precision={2}
-          required={true}
+          precision={0}
+          required={false}
+          integerOnly={true}
         />
 
         {/* Empty cell for 3-column grid alignment */}

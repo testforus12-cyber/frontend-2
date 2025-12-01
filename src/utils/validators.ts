@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 
 // =============================================================================
@@ -220,7 +219,8 @@ export const validateDisplayName = (name: string): string => {
  * Max 20 characters, all characters allowed
  */
 export const validateSubVendor = (name: string): string => {
-  if (!name) return 'Sub vendor is required';
+  // Optional field - only validate if provided
+  if (!name) return '';
   if (name.length > 20) return 'Sub vendor must be at most 20 characters';
   return '';
 };
@@ -230,7 +230,8 @@ export const validateSubVendor = (name: string): string => {
  * Alphanumeric only, auto-uppercase, max 20 characters
  */
 export const validateVendorCode = (code: string): string => {
-  if (!code) return 'Vendor code is required';
+  // Optional field - only validate if provided
+  if (!code) return '';
   if (code.length > 20) return 'Vendor code must be at most 20 characters';
   if (!/^[A-Z0-9]+$/.test(code.toUpperCase())) {
     return 'Vendor code can only contain letters and numbers';
@@ -294,17 +295,20 @@ const ChargeCardSchema = z.object({
 
 // Charges schema (mixed: simple numbers + card structures)
 const ChargesSchema = z.object({
-  // Simple numeric charges (unchanged)
+  // MANDATORY: Only docket and fuel surcharge are required
   docketCharges: z.number().min(0, 'Docket charges must be >= 0'),
-  minWeightKg: z.number().min(0, 'Min weight must be >= 0'),
-  minCharges: z.number().min(0, 'Min charges must be >= 0'),
-  hamaliCharges: z.number().min(0, 'Hamali charges must be >= 0'),
-  greenTax: z.number().min(0, 'Green tax must be >= 0'),
-  miscCharges: z.number().min(0, 'Misc charges must be >= 0'),
   fuelSurchargePct: z
     .number()
     .min(0, 'Fuel surcharge must be >= 0')
-    .max(40, 'Fuel surcharge must be <= 40'),
+    .max(50, 'Fuel surcharge must be <= 50'),
+
+  // OPTIONAL: All other basic charges
+  minWeightKg: z.number().min(0, 'Min weight must be >= 0').optional(),
+  minCharges: z.number().min(0, 'Min charges must be >= 0').optional(),
+  hamaliCharges: z.number().min(0, 'Hamali charges must be >= 0').optional(),
+  greenTax: z.number().min(0, 'Green tax must be >= 0').optional(),
+  miscCharges: z.number().min(0, 'Misc charges must be >= 0').optional(),
+  daccCharges: z.number().min(0, 'DACC charges must be >= 0').optional(),
 
   // --- UPDATED INVOICE FIELDS ---
   invoiceValueSurcharge: z
