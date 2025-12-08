@@ -37,12 +37,14 @@ import {
 } from '../utils/wizardValidation';
 
 
-
 // Icons
 import { CheckCircleIcon, XCircleIcon, AlertTriangle, RefreshCw, FileText, EyeIcon } from 'lucide-react';
 
 // Optional email validator
 import isEmail from 'isemail';
+
+// ScrollToTop helper (smooth scroll to ref when `when` changes)
+import ScrollToTop from '../components/ScrollToTop'; // adjust path if needed
 
 // ============================================================================
 // CONFIG / HELPERS
@@ -228,6 +230,14 @@ export const AddVendor: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Overlay + ScrollToTop state (ADDED)
+  const [showSubmitOverlay, setShowSubmitOverlay] = useState(false);
+  const [submitOverlayStage, setSubmitOverlayStage] =
+    useState<'loading' | 'success'>('loading');
+  // 👉 for ScrollToTop
+  const topRef = useRef<HTMLDivElement | null>(null);
+  const [scrollKey, setScrollKey] = useState<number | string>(0);
+
   // Invoice Value State (New)
   const [invoicePercentage, setInvoicePercentage] = useState<string>('');
   const [invoiceMinAmount, setInvoiceMinAmount] = useState<string>('');
@@ -371,88 +381,6 @@ useEffect(() => {
 ]);
 
   // ===== Local validation for basics =====
-  // const validateVendorBasicsLocal = (): { ok: boolean; errs: string[] } => {
-  //   const errs: string[] = [];
-  //   const b = vendorBasics.basics || {};
-
-  //   const name = capitalizeWords(safeGetField(b, 'name', 'companyName', 'company')).slice(0, 60);
-  //   const displayName = capitalizeWords(safeGetField(b, 'displayName', 'display_name')).slice(0, 30);
-  //   const companyName = capitalizeWords(safeGetField(b, 'companyName', 'company_name')).slice(0, 30);
-  //   const primaryCompanyName = capitalizeWords(
-  //     safeGetField(b, 'primaryCompanyName', 'primaryCompany'),
-  //   ).slice(0, 25);
-  //   const subVendor = capitalizeWords(safeGetField(b, 'subVendor', 'sub_vendor')).slice(0, 20);
-
-  //   const vendorCode = sanitizeDigitsOnly(safeGetField(b, 'vendorCode', 'vendor_code')).slice(0, 9);
-  //   const vendorPhone = sanitizeDigitsOnly(
-  //     safeGetField(b, 'vendorPhoneNumber', 'vendorPhone', 'primaryContactPhone'),
-  //   ).slice(0, 10);
-  //   const vendorEmail = safeGetField(
-  //     b,
-  //     'vendorEmailAddress',
-  //     'vendorEmail',
-  //     'primaryContactEmail',
-  //   ).trim();
-  //   const gstin = safeGetField(b, 'gstin', 'gst', 'gstNo')
-  //     .toUpperCase()
-  //     .replace(/\s+/g, '')
-  //     .slice(0, 15);
-  //   const address = safeGetField(b, 'address').trim().slice(0, 150);
-
-  //   if (!name || name.trim().length === 0) errs.push('Name is required (max 60 chars).');
-  //   if (name.trim().length > 60) errs.push('Name must be at most 60 characters.');
-  //   if (displayName && displayName.trim().length > 30)
-  //     errs.push('Display name must be at most 30 characters.');
-  //   if (companyName && companyName.trim().length > 30)
-  //     errs.push('Company name must be at most 30 characters.');
-  //   if (primaryCompanyName && primaryCompanyName.trim().length > 25)
-  //     errs.push('Primary company name must be at most 25 characters.');
-  //   if (subVendor && subVendor.trim().length > 20)
-  //     errs.push('Sub vendor must be at most 20 characters.');
-  //   if (!/^[0-9]{1,9}$/.test(vendorCode))
-  //     errs.push('Vendor code must be digits only, 1 to 9 digits.');
-  //   if (!/^[1-9][0-9]{9}$/.test(vendorPhone))
-  //     errs.push('Contact number must be 10 digits and cannot start with 0.');
-
-  //   let emailOk = false;
-  //   try {
-  //     emailOk = !!(
-  //       vendorEmail &&
-  //       (isEmail.validate ? isEmail.validate(vendorEmail) : isEmail(vendorEmail))
-  //     );
-  //   } catch {
-  //     emailOk = EMAIL_FALLBACK_RE.test(vendorEmail);
-  //   }
-  //   if (!emailOk) errs.push('Invalid email address (must include a domain and a dot).');
-
-  //   if (!GST_REGEX.test(gstin)) errs.push('GST number must be a valid 15-character GSTIN.');
-
-  //   if (!address || address.trim().length === 0)
-  //     errs.push('Address is required (max 150 chars).');
-  //   if (address.trim().length > 150)
-  //     errs.push('Address must be at most 150 characters.');
-
-  //   try {
-  //     const c = charges.charges || {};
-  //     const fuel = safeGetNumber(c, 0, 'fuelSurcharge', 'fuel');
-  //     if (!Number.isFinite(fuel) || fuel < 0 || fuel > 50) {
-  //       errs.push('Fuel surcharge must be between 0 and 50.');
-  //     }
-  //   } catch {
-  //     /* ignore */
-  //   }
-
-  //   const geo = pincodeLookup.geo || {};
-  //   const pincodeStr = String(geo.pincode ?? '')
-  //     .replace(/\D+/g, '')
-  //     .slice(0, 6);
-  //   if (pincodeStr && !(pincodeStr.length >= 3 && pincodeStr.length <= 6)) {
-  //     errs.push('Pincode looks invalid (must be 3–6 digits).');
-  //   }
-
-  //   return { ok: errs.length === 0, errs };
-  // };
-    // ===== Local validation for basics =====
   const validateVendorBasicsLocal = (): { ok: boolean; errs: string[] } => {
     const errs: string[] = [];
     const b = vendorBasics.basics || {};
@@ -471,10 +399,13 @@ useEffect(() => {
       safeGetField(b, 'subVendor', 'sub_vendor')
     ).slice(0, 20);
 
-    const vendorCode = sanitizeDigitsOnly(
-      safeGetField(b, 'vendorCode', 'vendor_code')
-    ).slice(0, 9);
+    // ✅ FIXED: Use 'b' not 'basics' - allow alphanumeric
+    const vendorCode = safeGetField(b, 'vendorCode', 'vendor_code')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 9);
 
+    // ✅ FIXED: Use 'b' instead of 'basics'
     const vendorPhone = sanitizeDigitsOnly(
       safeGetField(b, 'vendorPhoneNumber', 'vendorPhone', 'primaryContactPhone')
     ).slice(0, 10);
@@ -491,9 +422,9 @@ useEffect(() => {
       .replace(/\s+/g, '')
       .slice(0, 15);
     if (gstin) {
-  const gstError = validateGST(gstin);
-  if (gstError) errs.push(gstError);
-}
+      const gstError = validateGST(gstin);
+      if (gstError) errs.push(gstError);
+    }
     const address = safeGetField(b, 'address').trim().slice(0, 150);
 
     // ---- basic text length and required checks ----
@@ -515,8 +446,9 @@ useEffect(() => {
       errs.push('Sub vendor must be at most 20 characters.');
     }
 
-    if (!/^[0-9]{1,9}$/.test(vendorCode)) {
-      errs.push('Vendor code must be digits only, 1 to 9 digits.');
+    // ✅ FIXED: Allow alphanumeric vendor codes
+    if (!/^[A-Za-z0-9]{1,9}$/.test(vendorCode)) {
+      errs.push('Vendor code must be 1 to 9 characters, letters and digits only.');
     }
 
     if (!/^[1-9][0-9]{9}$/.test(vendorPhone)) {
@@ -698,313 +630,293 @@ useEffect(() => {
 
 
 
+
   // ===== Build API payload (uses wizard data OR legacy localStorage) =====
-    const buildPayloadForApi = () => {
-  // 🔍 DEBUG: Log raw form state BEFORE processing
-  console.log('📋 RAW FORM STATE (before buildPayloadForApi):', {
-    'vendorBasics.basics': vendorBasics.basics,
-    'charges.charges': charges.charges,
-    'volumetric.state': volumetric.state,
-    'pincodeLookup.geo': pincodeLookup.geo,
-  });
-  
-  const basics = vendorBasics.basics || {};
-  const geo = pincodeLookup.geo || {};
-
-  const name = capitalizeWords(safeGetField(basics, 'name', 'companyName')).slice(0, 60);
-  const displayName = capitalizeWords(
-    safeGetField(basics, 'displayName', 'display_name'),
-  ).slice(0, 30);
-  const companyName = capitalizeWords(
-    safeGetField(basics,  'legalCompanyName','companyName', 'company_name'),
-  ).slice(0, 30);
-  const primaryCompanyName = capitalizeWords(
-    safeGetField(basics, 'primaryCompanyName', 'primaryCompany'),
-  ).slice(0, 25);
-  const subVendor = capitalizeWords(safeGetField(basics, 'subVendor', 'sub_vendor')).slice(
-    0,
-    20,
-  );
-  
-  // ✅ FIX 1: Extract contactPerson
-  const contactPerson = capitalizeWords(
-    safeGetField(basics, 'contactPerson', 'contactPersonName', 'primaryContactName')
-  ).slice(0, 100);
-
-  const vendorCode = sanitizeDigitsOnly(
-    safeGetField(basics, 'vendorCode', 'vendor_code'),
-  ).slice(0, 9);
-
-  const vendorPhoneStr = sanitizeDigitsOnly(
-    safeGetField(basics, 'vendorPhoneNumber', 'vendorPhone', 'primaryContactPhone'),
-  ).slice(0, 10);
-  const vendorPhoneNum = Number(
-    clampNumericString(vendorPhoneStr, 1000000000, 9999999999, 10) || 0,
-  );
-
-  const vendorEmail = safeGetField(
-    basics,
-    'vendorEmailAddress',
-    'vendorEmail',
-    'primaryContactEmail',
-  ).trim();
-  const gstNo = safeGetField(basics, 'gstin', 'gstNo', 'gst')
-    .toUpperCase()
-    .replace(/\s+/g, '')
-    .slice(0, 15);
-  const address = safeGetField(basics, 'address').trim().slice(0, 150);
-  
-  // ✅ FIX 2: Extract city from geo
-  const city = String(geo.city ?? '').trim().slice(0, 50);
-  
-  // ✅ FIX 3: Extract rating from basics
-  const rating = Number(safeGetField(basics, 'rating', 'companyRating')) || 4;
-  
-  // ✅ FIX 4: Extract service mode (FTL/LTL)
-  const serviceMode = safeGetField(basics, 'serviceMode', 'service_mode') || 'FTL';
-
-  // const volData =
-  //   volumetric.volumetric || (volumetric as any).state || (volumetric as any).data || {};
-  // const volUnit =
-  //   safeGetField(volData, 'unit', 'volumetricUnit', 'selectedUnit') || 'cm';
-
-  // emitDebug('VOLUMETRIC_DATA_DEBUG', {
-  //   volData,
-  //   volUnit,
-  //   fullVolumetricHook: volumetric,
-  // });
-
-  // const volumetricBits =
-  //   volUnit === 'cm' || volUnit === 'centimeters'
-  //     ? {
-  //         divisor:
-  //           safeGetNumber(volData, 0, 'volumetricDivisor', 'divisor') || null,
-  //         cftFactor: null as number | null,
-  //       }
-  //     : {
-  //         divisor: null as number | null,
-  //         cftFactor: safeGetNumber(volData, 0, 'cftFactor', 'factor') || null,
-  //       };
-
-  // ✅ FIXED: Direct access to volumetric.state
-const volState = volumetric.state || {};
-const volUnit = volState.unit || 'cm';
-
-emitDebug('VOLUMETRIC_DATA_DEBUG', {
-  volState,
-  volUnit,
-  fullVolumetricHook: volumetric,
-});
-
-const volumetricBits =
-  volUnit === 'cm'
-    ? {
-        divisor: volState.volumetricDivisor || null,
-        cftFactor: null as number | null,
-      }
-    : {
-        divisor: null as number | null,
-        cftFactor: volState.cftFactor || null,
-      };
-
-  emitDebug('VOLUMETRIC_BITS_MAPPED', volumetricBits);
-
-  // ✅ FIXED: Preserve decimals instead of stripping them
-  const parseCharge = (
-    val: any,
-    min = 0,
-    max = 100000,
-    digitLimit?: number,
-  ): number => {
-    if (val === undefined || val === null || val === '') return 0;
+  const buildPayloadForApi = () => {
+    // 🔍 DEBUG: Log raw form state BEFORE processing
+    console.log('📋 RAW FORM STATE (before buildPayloadForApi):', {
+      'vendorBasics.basics': vendorBasics.basics,
+      'charges.charges': charges.charges,
+      'volumetric.state': volumetric.state,
+      'pincodeLookup.geo': pincodeLookup.geo,
+    });
     
-    // Convert to number directly (preserves decimals)
-    const num = Number(val);
-    
-    // Return 0 if NaN
-    if (isNaN(num)) return 0;
-    
-    // Clamp to min/max
-    const clamped = Math.min(Math.max(num, min), max);
-    
-    // Round to 2 decimal places to avoid floating point issues
-    return Math.round(clamped * 100) / 100;
-  };
+    const basics = vendorBasics.basics || {};
+    const geo = pincodeLookup.geo || {};
 
-     const c = charges.charges || {};
-
-  // 🔍 Normalize all toggle-based groups ONCE using your helper
-  const rovNorm        = normalizeChargeGroup(c.rovCharges);
-  const codNorm        = normalizeChargeGroup(c.codCharges);
-  const topayNorm = normalizeChargeGroup(c.toPayCharges);  // ✅ Capital P
-  const handlingNorm   = normalizeChargeGroup(c.handlingCharges);
-  const appointNorm    = normalizeChargeGroup(c.appointmentCharges);
-  const insuranceNorm  = normalizeChargeGroup(c.insuranceCharges || c.insuaranceCharges);
-  const odaNorm        = normalizeChargeGroup(c.odaCharges);
-  const prepaidNorm    = normalizeChargeGroup(c.prepaidCharges);
-  const fmNorm         = normalizeChargeGroup(c.fmCharges);
-
-  // ✅ serviceMode + volumetricUnit + all simple numeric charges
-  const priceRate = {
-    serviceMode: serviceMode,
-    volumetricUnit: volUnit,
-
-    // simple one–value fields
-    minWeight: parseCharge(
-      safeGetNumber(c, 0, 'minWeightKg'),  // ✅ Correct field name
+    const name = capitalizeWords(safeGetField(basics, 'name', 'companyName')).slice(0, 60);
+    const displayName = capitalizeWords(
+      safeGetField(basics, 'displayName', 'display_name'),
+    ).slice(0, 30);
+    const companyName = capitalizeWords(
+      safeGetField(basics, 'legalCompanyName', 'companyName', 'company_name'),
+    ).slice(0, 30);
+    const primaryCompanyName = capitalizeWords(
+      safeGetField(basics, 'primaryCompanyName', 'primaryCompany'),
+    ).slice(0, 25);
+    const subVendor = capitalizeWords(safeGetField(basics, 'subVendor', 'sub_vendor')).slice(
       0,
-      10000,
-      5,
-    ),
-    docketCharges: parseCharge(
-      safeGetNumber(c, 0, 'docketCharges'),
-      0,
-      10000,
-      5,
-    ),
-    fuel: parseCharge(
-      safeGetNumber(c, 0, 'fuelSurchargePct'),  // ✅ Correct field name
-      0,
-      50,
-      2,
-    ),
+      20,
+    );
+    
+    // ✅ FIX 1: Extract contactPerson
+    const contactPerson = capitalizeWords(
+      safeGetField(basics, 'contactPerson', 'contactPersonName', 'primaryContactName')
+    ).slice(0, 100);
 
-    // 🔁 ROV / COD / To-Pay etc – use normalized values
-    rovCharges: {
-      fixed:    parseCharge(rovNorm.fixed,    0, 100000),
-      variable: parseCharge(rovNorm.variable, 0, 100000),
-    },
-    codCharges: {
-      fixed:    parseCharge(codNorm.fixed,    0, 100000),
-      variable: parseCharge(codNorm.variable, 0, 100000),
-    },
-    topayCharges: {
-      fixed:    parseCharge(topayNorm.fixed,    0, 100000),
-      variable: parseCharge(topayNorm.variable, 0, 100000),
-    },
-    handlingCharges: {
-      fixed:    parseCharge(handlingNorm.fixed,    0, 100000),
-      variable: parseCharge(handlingNorm.variable, 0, 100000),
-      threshholdweight: parseCharge(
-        safeGetNumber(
-          c.handlingCharges || c,
+    // ✅ FIXED: Use 'basics' not 'b' - allow alphanumeric
+    const vendorCode = safeGetField(basics, 'vendorCode', 'vendor_code')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')   // keep only A–Z and 0–9
+      .slice(0, 9);
+
+    const vendorPhoneStr = sanitizeDigitsOnly(
+      safeGetField(basics, 'vendorPhoneNumber', 'vendorPhone', 'primaryContactPhone'),
+    ).slice(0, 10);
+    const vendorPhoneNum = Number(
+      clampNumericString(vendorPhoneStr, 1000000000, 9999999999, 10) || 0,
+    );
+
+    const vendorEmail = safeGetField(
+      basics,
+      'vendorEmailAddress',
+      'vendorEmail',
+      'primaryContactEmail',
+    ).trim();
+    const gstNo = safeGetField(basics, 'gstin', 'gstNo', 'gst')
+      .toUpperCase()
+      .replace(/\s+/g, '')
+      .slice(0, 15);
+    const address = safeGetField(basics, 'address').trim().slice(0, 150);
+    
+    // ✅ FIX 2: Extract city from geo
+    const city = String(geo.city ?? '').trim().slice(0, 50);
+    
+    // ✅ FIX 3: Extract rating from basics
+    const rating = Number(safeGetField(basics, 'rating', 'companyRating')) || 4;
+    
+    // ✅ FIX 4: Extract service mode (FTL/LTL)
+    const serviceMode = safeGetField(basics, 'serviceMode', 'service_mode') || 'FTL';
+
+    // ✅ FIXED: Direct access to volumetric.state
+    const volState = volumetric.state || {};
+    const volUnit = volState.unit || 'cm';
+
+    emitDebug('VOLUMETRIC_DATA_DEBUG', {
+      volState,
+      volUnit,
+      fullVolumetricHook: volumetric,
+    });
+
+    const volumetricBits =
+      volUnit === 'cm'
+        ? {
+            divisor: volState.volumetricDivisor || null,
+            cftFactor: null as number | null,
+          }
+        : {
+            divisor: null as number | null,
+            cftFactor: volState.cftFactor || null,
+          };
+
+    emitDebug('VOLUMETRIC_BITS_MAPPED', volumetricBits);
+
+    // ✅ FIXED: Preserve decimals instead of stripping them
+    const parseCharge = (
+      val: any,
+      min = 0,
+      max = 100000,
+      digitLimit?: number,
+    ): number => {
+      if (val === undefined || val === null || val === '') return 0;
+      
+      // Convert to number directly (preserves decimals)
+      const num = Number(val);
+      
+      // Return 0 if NaN
+      if (isNaN(num)) return 0;
+      
+      // Clamp to min/max
+      const clamped = Math.min(Math.max(num, min), max);
+      
+      // Round to 2 decimal places to avoid floating point issues
+      return Math.round(clamped * 100) / 100;
+    };
+
+    const c = charges.charges || {};
+
+    // 🔍 Normalize all toggle-based groups ONCE using your helper
+    const rovNorm        = normalizeChargeGroup(c.rovCharges);
+    const codNorm        = normalizeChargeGroup(c.codCharges);
+    const topayNorm = normalizeChargeGroup(c.toPayCharges);  // ✅ Capital P
+    const handlingNorm   = normalizeChargeGroup(c.handlingCharges);
+    const appointNorm    = normalizeChargeGroup(c.appointmentCharges);
+    const insuranceNorm  = normalizeChargeGroup(c.insuranceCharges || c.insuaranceCharges);
+    const odaNorm        = normalizeChargeGroup(c.odaCharges);
+    const prepaidNorm    = normalizeChargeGroup(c.prepaidCharges);
+    const fmNorm         = normalizeChargeGroup(c.fmCharges);
+
+    // ✅ serviceMode + volumetricUnit + all simple numeric charges
+    const priceRate = {
+      serviceMode: serviceMode,
+      volumetricUnit: volUnit,
+
+      // simple one–value fields
+      minWeight: parseCharge(
+        safeGetNumber(c, 0, 'minWeightKg'),  // ✅ Correct field name
+        0,
+        10000,
+        5,
+      ),
+      docketCharges: parseCharge(
+        safeGetNumber(c, 0, 'docketCharges'),
+        0,
+        10000,
+        5,
+      ),
+      fuel: parseCharge(
+        safeGetNumber(c, 0, 'fuelSurchargePct'),  // ✅ Correct field name
+        0,
+        50,
+        2,
+      ),
+
+      // 🔁 ROV / COD / To-Pay etc – use normalized values
+      rovCharges: {
+        fixed:    parseCharge(rovNorm.fixed,    0, 100000),
+        variable: parseCharge(rovNorm.variable, 0, 100000),
+      },
+      codCharges: {
+        fixed:    parseCharge(codNorm.fixed,    0, 100000),
+        variable: parseCharge(codNorm.variable, 0, 100000),
+      },
+      topayCharges: {
+        fixed:    parseCharge(topayNorm.fixed,    0, 100000),
+        variable: parseCharge(topayNorm.variable, 0, 100000),
+      },
+      handlingCharges: {
+        fixed:    parseCharge(handlingNorm.fixed,    0, 100000),
+        variable: parseCharge(handlingNorm.variable, 0, 100000),
+        threshholdweight: parseCharge(
+          safeGetNumber(
+            c.handlingCharges || c,
+            0,
+            'threshholdweight',
+            'handlingThresholdWeight',
+            'thresholdWeight',
+          ),
           0,
-          'threshholdweight',
-          'handlingThresholdWeight',
-          'thresholdWeight',
+          100000,
         ),
+      },
+      appointmentCharges: {
+        fixed:    parseCharge(appointNorm.fixed,    0, 100000),
+        variable: parseCharge(appointNorm.variable, 0, 100000),
+      },
+
+      // ====== volumetric (see next section) ======
+      ...volumetricBits,
+
+      // basic numeric add-ons
+      minCharges: parseCharge(
+        safeGetNumber(c, 0, 'minimumCharges', 'minCharges'),
         0,
         100000,
       ),
-    },
-    appointmentCharges: {
-      fixed:    parseCharge(appointNorm.fixed,    0, 100000),
-      variable: parseCharge(appointNorm.variable, 0, 100000),
-    },
+      greenTax: parseCharge(
+        safeGetNumber(c, 0, 'greenTax', 'ngt'),
+        0,
+        100000,
+      ),
+      daccCharges: parseCharge(
+        safeGetNumber(c, 0, 'daccCharges'),
+        0,
+        100000,
+      ),
+      miscellanousCharges: parseCharge(
+        safeGetNumber(c, 0, 'miscCharges', 'miscellanousCharges'),
+        0,
+        100000,
+      ),
 
-    // ====== volumetric (see next section) ======
-    ...volumetricBits,
+      insuaranceCharges: {
+        fixed:    parseCharge(insuranceNorm.fixed,    0, 100000),
+        variable: parseCharge(insuranceNorm.variable, 0, 100000),
+      },
+      odaCharges: {
+        fixed:    parseCharge(odaNorm.fixed,    0, 100000),
+        variable: parseCharge(odaNorm.variable, 0, 100000),
+      },
+      prepaidCharges: {
+        fixed:    parseCharge(prepaidNorm.fixed,    0, 100000),
+        variable: parseCharge(prepaidNorm.variable, 0, 100000),
+      },
+      fmCharges: {
+        fixed:    parseCharge(fmNorm.fixed,    0, 100000),
+        variable: parseCharge(fmNorm.variable, 0, 100000),
+      },
 
-    // basic numeric add-ons
-    minCharges: parseCharge(
-      safeGetNumber(c, 0, 'minimumCharges', 'minCharges'),
-      0,
-      100000,
-    ),
-    greenTax: parseCharge(
-      safeGetNumber(c, 0, 'greenTax', 'ngt'),
-      0,
-      100000,
-    ),
-    daccCharges: parseCharge(
-      safeGetNumber(c, 0, 'daccCharges'),
-      0,
-      100000,
-    ),
-    miscellanousCharges: parseCharge(
-      safeGetNumber(c, 0, 'miscCharges', 'miscellanousCharges'),
-      0,
-      100000,
-    ),
-
-    insuaranceCharges: {
-      fixed:    parseCharge(insuranceNorm.fixed,    0, 100000),
-      variable: parseCharge(insuranceNorm.variable, 0, 100000),
-    },
-    odaCharges: {
-      fixed:    parseCharge(odaNorm.fixed,    0, 100000),
-      variable: parseCharge(odaNorm.variable, 0, 100000),
-    },
-    prepaidCharges: {
-      fixed:    parseCharge(prepaidNorm.fixed,    0, 100000),
-      variable: parseCharge(prepaidNorm.variable, 0, 100000),
-    },
-    fmCharges: {
-      fixed:    parseCharge(fmNorm.fixed,    0, 100000),
-      variable: parseCharge(fmNorm.variable, 0, 100000),
-    },
-
-    hamaliCharges: parseCharge(
-      safeGetNumber(c, 0, 'hamaliCharges', 'hamali'),
-      0,
-      100000,
-    ),
-  };
-
-
-
-  // Use wizard data if available, fallback to legacy localStorage
-  const priceChart = (wizardData?.priceMatrix || zpm?.priceMatrix || {}) as PriceMatrix;
-  
-  // ✅ FIX 7: Extract selected zones from wizard
-  const selectedZones = wizardData?.selectedZones || zpm?.selectedZones || [];
-
-  const pincodeStr = String(geo.pincode ?? '')
-    .replace(/\D+/g, '')
-    .slice(0, 6);
-  const pincodeNum = Number(pincodeStr || 0);
-
-  // ✅ AUTO-ENABLE if user entered any values
-  const hasInvoicePercentage = invoicePercentage && Number(invoicePercentage) > 0;
-  const hasInvoiceMinAmount = invoiceMinAmount && Number(invoiceMinAmount) > 0;
-  const invoiceAutoEnabled = hasInvoicePercentage || hasInvoiceMinAmount;
-
-  const payloadForApi = {
-    customerID: getCustomerIDFromToken(),
-    companyName: companyName.trim(),
-    contactPerson: contactPerson,      // ✅ NEW - at root level
-    vendorCode: vendorCode,
-    vendorPhone: vendorPhoneNum,
-    vendorEmail: vendorEmail,
-    gstNo,
-    mode: transportMode || 'road',
-    address,
-    state: String(geo.state ?? '').toUpperCase(),
-    pincode: pincodeNum,
-    city: city,                         // ✅ NEW - at root level
-    rating: rating,                     // ✅ NEW - at root level
-    subVendor: subVendor,               // ✅ NEW - at root level (not nested)
-    selectedZones: selectedZones,       // ✅ NEW - at root level
-    human: { name, displayName, primaryCompanyName },  // Removed subVendor from here
-    prices: { priceRate, priceChart },
+      hamaliCharges: parseCharge(
+        safeGetNumber(c, 0, 'hamaliCharges', 'hamali'),
+        0,
+        100000,
+      ),
+    };
     
-    invoiceValueCharges: {
-      enabled: invoiceAutoEnabled,
-      percentage: Number(invoicePercentage || 0),
-      minimumAmount: Number(invoiceMinAmount || 0),
-      description: 'Invoice Value Handling Charges',
-    },
+
+
+    // Use wizard data if available, fallback to legacy localStorage
+    const priceChart = (wizardData?.priceMatrix || zpm?.priceMatrix || {}) as PriceMatrix;
+    
+    // ✅ FIX 7: Extract selected zones from wizard
+    const selectedZones = wizardData?.selectedZones || zpm?.selectedZones || [];
+
+    const pincodeStr = String(geo.pincode ?? '')
+      .replace(/\D+/g, '')
+      .slice(0, 6);
+    const pincodeNum = Number(pincodeStr || 0);
+
+    // ✅ AUTO-ENABLE if user entered any values
+    const hasInvoicePercentage = invoicePercentage && Number(invoicePercentage) > 0;
+    const hasInvoiceMinAmount = invoiceMinAmount && Number(invoiceMinAmount) > 0;
+    const invoiceAutoEnabled = hasInvoicePercentage || hasInvoiceMinAmount;
+
+    const payloadForApi = {
+      customerID: getCustomerIDFromToken(),
+      companyName: companyName.trim(),
+      contactPerson: contactPerson,      // ✅ NEW - at root level
+      vendorCode: vendorCode,
+      vendorPhone: vendorPhoneNum,
+      vendorEmail: vendorEmail,
+      gstNo,
+      mode: transportMode || 'road',
+      address,
+      state: String(geo.state ?? '').toUpperCase(),
+      pincode: pincodeNum,
+      city: city,                         // ✅ NEW - at root level
+      rating: rating,                     // ✅ NEW - at root level
+      subVendor: subVendor,               // ✅ NEW - at root level (not nested)
+      selectedZones: selectedZones,       // ✅ NEW - at root level
+      human: { name, displayName, primaryCompanyName },  // Removed subVendor from here
+      prices: { priceRate, priceChart },
+      
+      invoiceValueCharges: {
+        enabled: invoiceAutoEnabled,
+        percentage: Number(invoicePercentage || 0),
+        minimumAmount: Number(invoiceMinAmount || 0),
+        description: 'Invoice Value Handling Charges',
+      },
+    };
+    
+    console.log('🔍 FINAL PAYLOAD:', payloadForApi);
+    console.log('🔍 CHARGES IN PAYLOAD:', {
+      'priceRate.codCharges': payloadForApi.prices.priceRate.codCharges,
+      'priceRate.topayCharges': payloadForApi.prices.priceRate.topayCharges,
+      'priceRate.rovCharges': payloadForApi.prices.priceRate.rovCharges,
+      'priceRate.prepaidCharges': payloadForApi.prices.priceRate.prepaidCharges,
+    });
+    return payloadForApi;
   };
-  
-  console.log('🔍 FINAL PAYLOAD:', payloadForApi);
-  console.log('🔍 CHARGES IN PAYLOAD:', {
-    'priceRate.codCharges': payloadForApi.prices.priceRate.codCharges,
-    'priceRate.topayCharges': payloadForApi.prices.priceRate.topayCharges,
-    'priceRate.rovCharges': payloadForApi.prices.priceRate.rovCharges,
-    'priceRate.prepaidCharges': payloadForApi.prices.priceRate.prepaidCharges,
-  });
-  return payloadForApi;
-};
 
   // ===== Submit =====
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1022,6 +934,11 @@ const volumetricBits =
     }
 
     setIsSubmitting(true);
+
+    // Show full-screen overlay loading immediately
+    setShowSubmitOverlay(true);
+    setSubmitOverlayStage('loading');
+
     try {
       const payloadForApi = buildPayloadForApi();
       
@@ -1034,51 +951,48 @@ const volumetricBits =
       });
       
       console.log('🔍 INVOICE DEBUG:', {
-    invoicePercentage,
-    invoiceMinAmount,
-    invoiceUseMax,
-  });
-  // 👆 JUST THIS ONE LINE
+        invoicePercentage,
+        invoiceMinAmount,
+        invoiceUseMax,
+      });
+      // 👆 JUST THIS ONE LINE
       emitDebug('SUBMIT_PAYLOAD_FOR_API', payloadForApi);
       console.debug('[SUBMIT] payloadForApi', payloadForApi);
  
       const fd = new FormData();
-fd.append('customerID', String(payloadForApi.customerID || ''));
-fd.append('companyName', payloadForApi.companyName);
-fd.append('contactPerson', payloadForApi.contactPerson);              // ✅ NEW
-fd.append('vendorCode', payloadForApi.vendorCode);
-fd.append('vendorPhone', String(payloadForApi.vendorPhone));
-fd.append('vendorEmail', payloadForApi.vendorEmail);
-fd.append('gstNo', payloadForApi.gstNo);
-fd.append('mode', payloadForApi.mode);
-fd.append('address', payloadForApi.address);
-fd.append('state', payloadForApi.state);
-fd.append('pincode', String(payloadForApi.pincode));
-fd.append('city', payloadForApi.city);                                // ✅ NEW
-fd.append('rating', String(payloadForApi.rating));                    // ✅ FIXED - use actual rating
-fd.append('subVendor', payloadForApi.subVendor || '');                // ✅ NEW
-fd.append('selectedZones', JSON.stringify(payloadForApi.selectedZones)); // ✅ NEW
-fd.append('priceRate', JSON.stringify(payloadForApi.prices.priceRate));
-fd.append('priceChart', JSON.stringify(payloadForApi.prices.priceChart));
-if (priceChartFile) fd.append('priceChart', priceChartFile);
-fd.append('vendorJson', JSON.stringify(payloadForApi));
+      fd.append('customerID', String(payloadForApi.customerID || ''));
+      fd.append('companyName', payloadForApi.companyName);
+      fd.append('contactPerson', payloadForApi.contactPerson);              // ✅ NEW
+      fd.append('vendorCode', payloadForApi.vendorCode);
+      fd.append('vendorPhone', String(payloadForApi.vendorPhone));
+      fd.append('vendorEmail', payloadForApi.vendorEmail);
+      fd.append('gstNo', payloadForApi.gstNo);
+      fd.append('mode', payloadForApi.mode);
+      fd.append('address', payloadForApi.address);
+      fd.append('state', payloadForApi.state);
+      fd.append('pincode', String(payloadForApi.pincode));
+      fd.append('city', payloadForApi.city);                                // ✅ NEW
+      fd.append('rating', String(payloadForApi.rating));                    // ✅ FIXED - use actual rating
+      fd.append('subVendor', payloadForApi.subVendor || '');                // ✅ NEW
+      fd.append('selectedZones', JSON.stringify(payloadForApi.selectedZones)); // ✅ NEW
+      fd.append('priceRate', JSON.stringify(payloadForApi.prices.priceRate));
+      fd.append('priceChart', JSON.stringify(payloadForApi.prices.priceChart));
+      if (priceChartFile) fd.append('priceChart', priceChartFile);
+      fd.append('vendorJson', JSON.stringify(payloadForApi));
 
-// 🔍 COMPREHENSIVE DEBUG: Show exactly what's in FormData
-console.log('📦 FormData being sent:', {
-  customerID: payloadForApi.customerID,
-  companyName: payloadForApi.companyName,
-  contactPerson: payloadForApi.contactPerson || '(EMPTY)',
-  subVendor: payloadForApi.subVendor || '(EMPTY)',
-  vendorCode: payloadForApi.vendorCode,
-  priceRateStringified: JSON.stringify(payloadForApi.prices.priceRate).substring(0, 200) + '...',
-  priceRateContainsCOD: JSON.stringify(payloadForApi.prices.priceRate).includes('codCharges'),
-  priceRateContainsTOPAY: JSON.stringify(payloadForApi.prices.priceRate).includes('topayCharges'),
-  actualCODValue: payloadForApi.prices.priceRate.codCharges,
-  actualTOPAYValue: payloadForApi.prices.priceRate.topayCharges,
-});
-
-
-
+      // 🔍 COMPREHENSIVE DEBUG: Show exactly what's in FormData
+      console.log('📦 FormData being sent:', {
+        customerID: payloadForApi.customerID,
+        companyName: payloadForApi.companyName,
+        contactPerson: payloadForApi.contactPerson || '(EMPTY)',
+        subVendor: payloadForApi.subVendor || '(EMPTY)',
+        vendorCode: payloadForApi.vendorCode,
+        priceRateStringified: JSON.stringify(payloadForApi.prices.priceRate).substring(0, 200) + '...',
+        priceRateContainsCOD: JSON.stringify(payloadForApi.prices.priceRate).includes('codCharges'),
+        priceRateContainsTOPAY: JSON.stringify(payloadForApi.prices.priceRate).includes('topayCharges'),
+        actualCODValue: payloadForApi.prices.priceRate.codCharges,
+        actualTOPAYValue: payloadForApi.prices.priceRate.topayCharges,
+      });
 
       const token = getAuthToken();
       const url = `${API_BASE}/api/transporter/addtiedupcompanies`;
@@ -1101,12 +1015,16 @@ console.log('📦 FormData being sent:', {
           duration: 5200,
         });
         setIsSubmitting(false);
+        setShowSubmitOverlay(false); // 👈 ensure overlay hides on API error
         return;
       }
 
-      toast.success('Vendor created successfully!', { duration: 3400 });
+      toast.success('Vendor created successfully!', { duration: 800 });
 
-      // Clear draft, reset form, clear wizard data AND legacy localStorage
+      // show success tick in overlay
+      setSubmitOverlayStage('success');
+
+      // reset the form as you already do
       clearDraft();
       clearWizard();
       localStorage.removeItem(ZPM_KEY);
@@ -1128,16 +1046,22 @@ console.log('📦 FormData being sent:', {
       setWizardValidation(null);
       setWizardStatus(null);
       setRefreshTrigger((x) => x + 1);
+
+      // trigger smooth scroll to top (ScrollToTop listens on this)
+      setScrollKey(Date.now());
     } catch (err) {
       emitDebugError('SUBMIT_EXCEPTION', {
         error: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       });
       toast.error('Unexpected error. Please try again.', { duration: 5200 });
+      setShowSubmitOverlay(false); // 👈 hide overlay on unexpected exception
     } finally {
       setIsSubmitting(false);
+      // NOTE: Do not auto-hide overlay here — success state should show until user clicks action.
     }
   };
+
 
 
 
@@ -1167,7 +1091,10 @@ console.log('📦 FormData being sent:', {
   // PAGE UI (your preferred UI)
   // ========================================================================
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200">
+    <div
+      ref={topRef}
+      className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200"
+    >
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 backdrop-blur bg-white/70 border-b border-slate-200">
         <div className="w-full px-8 py-3 flex items-center justify-between">
@@ -1593,6 +1520,61 @@ console.log('📦 FormData being sent:', {
 
         
       </div>
+
+      {/* Full-screen submit overlay */}
+      {showSubmitOverlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm w-[90%]">
+            {submitOverlayStage === 'loading' ? (
+              <>
+                <div className="w-16 h-16 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
+                <p className="text-sm text-slate-700 font-medium">
+                  Creating vendor, please wait…
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+                  <CheckCircleIcon className="w-10 h-10 text-green-600" />
+                </div>
+                <p className="text-sm text-slate-800 font-semibold">
+                  Vendor added successfully!
+                </p>
+                <p className="text-xs text-slate-500">
+                  Add another vendor?
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // overlay is already on success, form already reset
+                      setShowSubmitOverlay(false);
+                      // ensure we’re at the top
+                      setScrollKey(Date.now());
+                    }}
+                    className="mt-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                  >
+                    Add another vendor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSubmitOverlay(false);
+                      navigate('/my-vendors');
+                    }}
+                    className="mt-1 px-4 py-2 rounded-lg bg-white border border-slate-200 text-sm font-medium hover:bg-slate-50"
+                  >
+                    Go to Vendor list
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Smooth scroll helper after success */}
+      <ScrollToTop targetRef={topRef} when={scrollKey} offset={80} />
     </div>
   );
 };
