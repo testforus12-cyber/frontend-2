@@ -266,7 +266,7 @@ const ODAUpload: React.FC = () => {
     const toastId = toast.loading('Saving distance-weight matrix...');
 
     try {
-      const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://tester-backend-4nxc.onrender.com').replace(/\/+$/, '');
+      const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://backend-2-4tjr.onrender.com').replace(/\/+$/, '');
       
       // Get auth token
       const token = localStorage.getItem('authToken') || 
@@ -648,7 +648,7 @@ const ODAUpload: React.FC = () => {
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="w-full px-8 py-8">
         <div className="mb-6 flex items-center justify-between">
           <button
             onClick={() => navigate('/zone-price-matrix')}

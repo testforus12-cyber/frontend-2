@@ -23,7 +23,9 @@ export const VARIABLE_RANGES = [
   '3% - 4%',
   '4% - 5%',
 ] as const;
-export type VariableRange = typeof VARIABLE_RANGES[number];
+
+// Updated to support both old string format and new numeric format
+export type VariableRange = typeof VARIABLE_RANGES[number] | number | string;
 
 // =============================================================================
 // CHARGE CARD DATA STRUCTURE
@@ -62,14 +64,52 @@ export const validateFixedAmount = (value: number, isHandlingCharge: boolean = f
  * Validate variable range selection
  * Must be one of the allowed enum values
  */
-export const validateVariableRange = (value: string): string => {
-  if (!value) {
+export const validateVariableRange = (value: string | number): string => {
+  // Allow 0 as valid
+  if (value === 0 || value === '0' || value === '0%') {
+    return '';
+  }
+  
+  if (!value && value !== 0) {
     return 'This field is required';
   }
-  if (!VARIABLE_RANGES.includes(value as VariableRange)) {
-    return 'Please choose a valid percentage range';
+  
+  // Handle numeric values (new format)
+  if (typeof value === 'number') {
+    if (value < 0 || value > 5) {
+      return 'Percentage must be between 0-5%';
+    }
+    return '';
   }
-  return '';
+  
+  // Handle string values (could be old format or intermediate typing like "3.")
+  if (typeof value === 'string') {
+    // Allow intermediate decimal input during typing
+    if (value.endsWith('.')) {
+      const numPart = Number(value.slice(0, -1));
+      if (Number.isFinite(numPart) && numPart >= 0 && numPart <= 5) {
+        return '';
+      }
+    }
+    
+    // Check if it's a valid numeric string
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+      if (num < 0 || num > 5) {
+        return 'Percentage must be between 0-5%';
+      }
+      return '';
+    }
+    
+    // Check if it's old format (range strings)
+    if (VARIABLE_RANGES.includes(value as any)) {
+      return '';
+    }
+    
+    return 'Please enter a valid percentage (0-5%)';
+  }
+  
+  return 'Invalid value';
 };
 
 /**

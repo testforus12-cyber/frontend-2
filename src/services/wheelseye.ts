@@ -1,5 +1,6 @@
 // src/services/wheelseye.ts
 import { computeWheelseyePrice } from "./wheelseyeEngine";
+import { parseDistanceToKm } from "../utils/distanceParser";
 
 import axios from "axios";
 
@@ -77,7 +78,7 @@ export type VehiclePricingData = {
 /** --- Config (use env when available) --- */
 const BASE_URL =
   (import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, "") ||
-    "https://tester-backend-4nxc.onrender.com");
+    "https://backend-2-4tjr.onrender.com");
 
 const AUTH_HEADER = (token?: string) =>
   token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -411,15 +412,28 @@ export async function buildFtlAndWheelseyeQuotes(opts: {
   } = opts;
 
   // 1) Distance: ALWAYS use the provided distance from main calculation (same as other vendors)
-  let distanceKm = 0;
+  // let distanceKm = 0;
   
-  console.log('Distance override received:', distanceKmOverride, 'type:', typeof distanceKmOverride);
+  // console.log('Distance override received:', distanceKmOverride, 'type:', typeof distanceKmOverride);
   
-  if (typeof distanceKmOverride === "number" && distanceKmOverride > 0) {
-    distanceKm = distanceKmOverride;
-    console.log(`✅ Using provided distance from main calculation: ${distanceKm}km`);
-    console.log(`✅ SKIPPING all distance calculations - using exact same distance as other vendors`);
-  } else if (typeof distanceKmOverride === "number" && distanceKmOverride === 0) {
+  // if (typeof distanceKmOverride === "number" && distanceKmOverride > 0) {
+  //   distanceKm = distanceKmOverride;
+  //   console.log(`✅ Using provided distance from main calculation: ${distanceKm}km`);
+  //   console.log(`✅ SKIPPING all distance calculations - using exact same distance as other vendors`);
+  // }
+
+let distanceKm = parseDistanceToKm(distanceKmOverride);
+
+if (distanceKm <= 0) {
+  console.error('❌ No valid distance provided!');
+  return {
+    distanceKm: 0,
+    ftlQuote: null,
+    wheelseyeQuote: null,
+    numbers: { ftlPrice: 0, wheelseyePrice: 0, actualWeight: 0, volumetricWeight: 0, chargeableWeight: 0 },
+  };
+
+}else if (typeof distanceKmOverride === "number" && distanceKmOverride === 0) {
     console.error('❌ Distance override is 0 - this means main calculation failed to provide distance');
     console.error('❌ Cannot proceed with Wheelseye/Local FTL calculation without valid distance');
     return {
@@ -437,7 +451,7 @@ export async function buildFtlAndWheelseyeQuotes(opts: {
     } catch (error) {
       // Try to calculate distance using pincode coordinates as fallback
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://tester-backend-4nxc.onrender.com'}/api/vendor/wheelseye-distance`, {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://backend-2-4tjr.onrender.com'}/api/vendor/wheelseye-distance`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -507,49 +521,10 @@ export async function buildFtlAndWheelseyeQuotes(opts: {
       token
     );
 
-    // For >18000kg loads, split into multiple vehicles using chargeableWeight
-    if (chargeableWeight > 18000) {
-      // split into vehicles; re-query per vehicle
-      const vehicleCount = Math.ceil(chargeableWeight / 18000);
-      let totalWE = 0;
-      let totalFTL = 0;
-
-      console.log(`📦 Load exceeds 18T, splitting into ${vehicleCount} vehicles based on chargeableWeight`);
-
-      const calls = Array.from({ length: vehicleCount }, (_, i) => {
-        // Each vehicle carries up to 18000kg of chargeable weight
-        const w = Math.min(18000, chargeableWeight - i * 18000);
-        return getWheelseyePriceFromDB(
-          w,
-          distanceKm,
-          [{ count: 1, length: 100, width: 100, height: 100, weight: w }],
-          token
-        ).then(
-          (r) => ({ ok: true as const, price: r.price, w }),
-          (err) => ({ ok: false as const, err, w })
-        );
-      });
-
-      const results = await Promise.all(calls);
-      for (const r of results) {
-        if (r.ok) {
-          totalWE += r.price;
-          totalFTL += Math.round((r.price * 1.2) / 10) * 10;
-        } else {
-          const fb = Math.round(
-            ((wheelseyeResult?.price ?? 50000) / vehicleCount)
-          );
-          totalWE += fb;
-          totalFTL += Math.round((fb * 1.2) / 10) * 10;
-        }
-      }
-      wheelseyePrice = totalWE;
-      ftlPrice = totalFTL;
-      wheelseyeResult = { ...wheelseyeResult, price: wheelseyePrice };
-    } else {
-      wheelseyePrice = wheelseyeResult.price;
-      ftlPrice = Math.round((wheelseyePrice * 1.2) / 10) * 10;
-    }
+    // Engine now handles ALL weight ranges including >18T
+    // No need for manual splitting here
+    wheelseyePrice = wheelseyeResult.price;
+    ftlPrice = Math.round((wheelseyePrice * 1.2) / 10) * 10;
   } catch (e) {
     console.warn("Wheelseye pricing failed, using fallback:", e);
     ftlPrice = Math.round((ekartFallback * 1.1) / 10) * 10;

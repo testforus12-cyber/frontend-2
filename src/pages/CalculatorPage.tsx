@@ -556,7 +556,7 @@ useEffect(() => {
     if (!user || !token) return;
     try {
       const response = await axios.get(
-        `https://tester-backend-4nxc.onrender.com/api/transporter/getpackinglist?customerId=${
+        `https://backend-2-4tjr.onrender.com/api/transporter/getpackinglist?customerId=${
           (user as any).customer._id
         }`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -577,7 +577,7 @@ useEffect(() => {
     if (window.confirm("Delete this preset permanently?")) {
       try {
         await axios.delete(
-          `https://tester-backend-4nxc.onrender.com/api/transporter/deletepackinglist/${presetId}`,
+          `https://backend-2-4tjr.onrender.com/api/transporter/deletepackinglist/${presetId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -712,7 +712,7 @@ useEffect(() => {
 
     try {
       await axios.post(
-        `https://tester-backend-4nxc.onrender.com/api/transporter/savepackinglist`,
+        `https://backend-2-4tjr.onrender.com/api/transporter/savepackinglist`,
         payload,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -839,7 +839,7 @@ useEffect(() => {
 
     try {
       const resp = await axios.post(
-        "https://tester-backend-4nxc.onrender.com/api/transporter/calculate",
+        "https://backend-2-4tjr.onrender.com/api/transporter/calculate",
         {
           customerID: (user as any).customer._id,
           userogpincode: (user as any).customer.pincode,
@@ -885,6 +885,35 @@ useEffect(() => {
         ...(cheapestDPWorld ? [{ ...cheapestDPWorld, isTiedUp: false }] : []),
       ];
 
+      // Extract distance from backend quotes for consistency
+      let distanceKmOverride: number | undefined;
+      try {
+        if (Array.isArray(all) && all.length > 0) {
+          const quoteWithDistance = all.find((q) => {
+            return (
+              (typeof q?.distanceKm === "number" && q.distanceKm > 0) ||
+              (typeof q?.distance === "string" && q.distance.length > 0)
+            );
+          });
+          
+          if (quoteWithDistance) {
+            if (typeof quoteWithDistance.distanceKm === "number" && quoteWithDistance.distanceKm > 0) {
+              distanceKmOverride = quoteWithDistance.distanceKm;
+            } else if (typeof quoteWithDistance.distance === "string") {
+              const numMatch = quoteWithDistance.distance.match(/(\d+)/);
+              if (numMatch && numMatch[1]) {
+                const parsed = parseInt(numMatch[1], 10);
+                if (!isNaN(parsed) && parsed > 0) {
+                  distanceKmOverride = parsed;
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Silently continue if distance extraction fails
+      }
+
       // ---------- Inject Local FTL + Wheelseye via SERVICE ----------
       const { ftlQuote, wheelseyeQuote } = await buildFtlAndWheelseyeQuotes({
         fromPincode,
@@ -893,6 +922,7 @@ useEffect(() => {
         totalWeight,
         token,
         isWheelseyeServiceArea: (pin: string) => /^\d{6}$/.test(pin),
+        distanceKmOverride,
       });
 
       if (ftlQuote) others.unshift(ftlQuote);

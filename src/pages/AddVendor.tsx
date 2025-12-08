@@ -110,7 +110,7 @@ function readSimpleCharge(root: any, ...keys: string[]): number {
 
 // ✅ Use your deployed backend (from the "working" version)
 const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL || 'https://tester-backend-4nxc.onrender.com').replace(/\/+$/, '');
+  (import.meta.env.VITE_API_BASE_URL || 'https://backend-2-4tjr.onrender.com').replace(/\/+$/, '');
 
 const ZPM_KEY = 'zonePriceMatrixData';
 
@@ -700,6 +700,14 @@ useEffect(() => {
 
   // ===== Build API payload (uses wizard data OR legacy localStorage) =====
     const buildPayloadForApi = () => {
+  // 🔍 DEBUG: Log raw form state BEFORE processing
+  console.log('📋 RAW FORM STATE (before buildPayloadForApi):', {
+    'vendorBasics.basics': vendorBasics.basics,
+    'charges.charges': charges.charges,
+    'volumetric.state': volumetric.state,
+    'pincodeLookup.geo': pincodeLookup.geo,
+  });
+  
   const basics = vendorBasics.basics || {};
   const geo = pincodeLookup.geo || {};
 
@@ -750,7 +758,7 @@ useEffect(() => {
   const city = String(geo.city ?? '').trim().slice(0, 50);
   
   // ✅ FIX 3: Extract rating from basics
-  const rating = Number(safeGetField(basics, 'rating')) || 4;
+  const rating = Number(safeGetField(basics, 'rating', 'companyRating')) || 4;
   
   // ✅ FIX 4: Extract service mode (FTL/LTL)
   const serviceMode = safeGetField(basics, 'serviceMode', 'service_mode') || 'FTL';
@@ -801,6 +809,7 @@ const volumetricBits =
 
   emitDebug('VOLUMETRIC_BITS_MAPPED', volumetricBits);
 
+  // ✅ FIXED: Preserve decimals instead of stripping them
   const parseCharge = (
     val: any,
     min = 0,
@@ -808,10 +817,18 @@ const volumetricBits =
     digitLimit?: number,
   ): number => {
     if (val === undefined || val === null || val === '') return 0;
-    const s = String(val);
-    const digitsOnly = sanitizeDigitsOnly(s);
-    const clamped = clampNumericString(digitsOnly, min, max, digitLimit);
-    return Number(clamped || 0);
+    
+    // Convert to number directly (preserves decimals)
+    const num = Number(val);
+    
+    // Return 0 if NaN
+    if (isNaN(num)) return 0;
+    
+    // Clamp to min/max
+    const clamped = Math.min(Math.max(num, min), max);
+    
+    // Round to 2 decimal places to avoid floating point issues
+    return Math.round(clamped * 100) / 100;
   };
 
      const c = charges.charges || {};
@@ -980,6 +997,12 @@ const volumetricBits =
   };
   
   console.log('🔍 FINAL PAYLOAD:', payloadForApi);
+  console.log('🔍 CHARGES IN PAYLOAD:', {
+    'priceRate.codCharges': payloadForApi.prices.priceRate.codCharges,
+    'priceRate.topayCharges': payloadForApi.prices.priceRate.topayCharges,
+    'priceRate.rovCharges': payloadForApi.prices.priceRate.rovCharges,
+    'priceRate.prepaidCharges': payloadForApi.prices.priceRate.prepaidCharges,
+  });
   return payloadForApi;
 };
 
@@ -1001,6 +1024,15 @@ const volumetricBits =
     setIsSubmitting(true);
     try {
       const payloadForApi = buildPayloadForApi();
+      
+      // Debug: Log the 3 specific fields we're tracking
+      console.log('📤 Sending Fields:', {
+        contactPerson: payloadForApi.contactPerson || '(empty)',
+        subVendor: payloadForApi.subVendor || '(empty)',
+        codCharges: payloadForApi.prices?.priceRate?.codCharges,
+        topayCharges: payloadForApi.prices?.priceRate?.topayCharges,
+      });
+      
       console.log('🔍 INVOICE DEBUG:', {
     invoicePercentage,
     invoiceMinAmount,
@@ -1030,6 +1062,20 @@ fd.append('priceRate', JSON.stringify(payloadForApi.prices.priceRate));
 fd.append('priceChart', JSON.stringify(payloadForApi.prices.priceChart));
 if (priceChartFile) fd.append('priceChart', priceChartFile);
 fd.append('vendorJson', JSON.stringify(payloadForApi));
+
+// 🔍 COMPREHENSIVE DEBUG: Show exactly what's in FormData
+console.log('📦 FormData being sent:', {
+  customerID: payloadForApi.customerID,
+  companyName: payloadForApi.companyName,
+  contactPerson: payloadForApi.contactPerson || '(EMPTY)',
+  subVendor: payloadForApi.subVendor || '(EMPTY)',
+  vendorCode: payloadForApi.vendorCode,
+  priceRateStringified: JSON.stringify(payloadForApi.prices.priceRate).substring(0, 200) + '...',
+  priceRateContainsCOD: JSON.stringify(payloadForApi.prices.priceRate).includes('codCharges'),
+  priceRateContainsTOPAY: JSON.stringify(payloadForApi.prices.priceRate).includes('topayCharges'),
+  actualCODValue: payloadForApi.prices.priceRate.codCharges,
+  actualTOPAYValue: payloadForApi.prices.priceRate.topayCharges,
+});
 
 
 
@@ -1124,7 +1170,7 @@ fd.append('vendorJson', JSON.stringify(payloadForApi));
     <div className="min-h-screen bg-gradient-to-b from-slate-100 to-slate-200">
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 backdrop-blur bg-white/70 border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+        <div className="w-full px-8 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-blue-600 text-white grid place-items-center font-bold shadow-sm">
               F
@@ -1165,7 +1211,7 @@ fd.append('vendorJson', JSON.stringify(payloadForApi));
 
       {/* Token panel (debug) */}
       {tokenPanelOpen && (
-        <div className="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-8 mt-4">
           <div className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-slate-800">Current Auth Token</h2>
@@ -1212,7 +1258,7 @@ fd.append('vendorJson', JSON.stringify(payloadForApi));
       )}
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="w-full px-8 py-6">
         <form id="add-vendor-form" onSubmit={handleSubmit} className="space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm overflow-hidden">
             <div className="grid grid-cols-1 gap-0 divide-y divide-slate-200">
@@ -1238,7 +1284,7 @@ fd.append('vendorJson', JSON.stringify(payloadForApi));
               {/* Invoice Value Charges Section (Placed Intelligently here) */}
               {showInvoiceSection && (
   <div className="p-6 md:p-8 bg-slate-50/60 border-t border-slate-200">
-    <div className="max-w-4xl">
+    <div className="w-full">
       <div className="flex items-center gap-2 mb-4">
         <FileText className="w-5 h-5 text-blue-600" />
         <h3 className="text-lg font-semibold text-slate-900">

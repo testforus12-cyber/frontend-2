@@ -137,7 +137,7 @@ export default function PricingPage() {
       <div className="container mx-auto px-4 py-16 sm:py-24">
         
         {/* Header Section */}
-        <motion.div initial={{opacity:0, y:-20}} animate={{opacity:1,y:0}} className="text-center max-w-4xl mx-auto">
+        <motion.div initial={{opacity:0, y:-20}} animate={{opacity:1,y:0}} className="text-center w-full mx-auto">
           <p className="font-semibold text-blue-600">Pricing Plans</p>
           <h1 className="mt-2 text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
             The Right Plan for Your Business
@@ -160,7 +160,7 @@ export default function PricingPage() {
         </div>
 
         {/* FAQ Section */}
-        <motion.div initial={{opacity:0, y:50}} whileInView={{opacity:1, y:0}} viewport={{once: true, amount:0.2}} className='mt-24 max-w-4xl mx-auto'>
+        <motion.div initial={{opacity:0, y:50}} whileInView={{opacity:1, y:0}} viewport={{once: true, amount:0.2}} className='mt-24 w-full mx-auto'>
            <div className="text-center mb-12">
                <h2 className="text-3xl font-extrabold text-slate-900">Frequently Asked Questions</h2>
            </div>

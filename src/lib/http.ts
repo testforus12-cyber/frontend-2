@@ -24,7 +24,7 @@ function getEnv(name: string): string | undefined {
 const raw =
   getEnv("VITE_API_BASE_URL") ||           // Vite
   getEnv("REACT_APP_URL") ||               // CRA (dev)
-  "https://tester-backend-4nxc.onrender.com"; // fallback
+  "https://backend-2-4tjr.onrender.com"; // fallback
 
 // keep protocol as provided; just remove trailing slash
 const rawNoSlash = raw.replace(/\/$/, "");

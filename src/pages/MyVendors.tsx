@@ -33,7 +33,7 @@ interface Vendor {
 }
 
 // Base URL for non-local environments (Vercel, etc.)
-const API_BASE = import.meta.env.VITE_API_URL || 'https://tester-backend-4nxc.onrender.com';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://backend-2-4tjr.onrender.com';
 
 const MyVendors: React.FC = () => {
   const { user } = useAuth();

@@ -37,7 +37,7 @@ export interface PincodeLookupResponse {
 // Normalize base URL (strip trailing slashes). Default to your Render host.
 const RAW_BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  'https://tester-backend-4nxc.onrender.com';
+  'https://backend-2-4tjr.onrender.com';
 
 const API_BASE = RAW_BASE.replace(/\/+$/, '');
 

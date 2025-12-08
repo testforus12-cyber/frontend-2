@@ -14,7 +14,7 @@ const OTPVerification: React.FC<OTPProps> = ({ email }) => {
   const handleVerify = async () => {
     try {
       setVerifying(true);
-      const res = await axios.post("https://tester-backend-4nxc.onrender.com/api/auth/signup/verify", {
+      const res = await axios.post("https://backend-2-4tjr.onrender.com/api/auth/signup/verify", {
         email,
         emailOtp,
         phoneOtp,

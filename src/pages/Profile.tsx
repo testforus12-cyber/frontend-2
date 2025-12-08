@@ -63,7 +63,7 @@ const ProfilePage: React.FC = () => {
     if (passwordFields.newPassword.length < 8) { toast.error('New password must be at least 8 characters long.'); setIsSaving(false); return; }
 
     try {
-      const response = await axios.post("https://tester-backend-4nxc.onrender.com/api/auth/changepassword", {
+      const response = await axios.post("https://backend-2-4tjr.onrender.com/api/auth/changepassword", {
           email: customer.email, password: passwordFields.currentPassword, newpassword: passwordFields.newPassword,
       });
       toast.success(response.data?.message || 'Password changed successfully!');
@@ -167,7 +167,7 @@ const ProfilePage: React.FC = () => {
                         </div>
                      </div>
                       <p className='text-xs text-slate-400 mt-4'>Tokens are used for generating detailed rate comparisons.</p>
-                      <button className='w-full mt-4 bg-green-500 text-white font-semibold py-2 rounded-lg text-sm hover:bg-green-600 transition'>Buy More Tokens</button>
+                      <button className='w-full px-8 mt-4 bg-green-500 text-white font-semibold py-2 rounded-lg text-sm hover:bg-green-600 transition'>Buy More Tokens</button>
                  </Card>
             </div>
 

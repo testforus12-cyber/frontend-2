@@ -49,7 +49,7 @@ const ForgotPasswordPage: React.FC = () => {
     }
 
     try {
-      const res = await axios.post("https://tester-backend-4nxc.onrender.com/api/auth/forgotpassword", { email });
+      const res = await axios.post("https://backend-2-4tjr.onrender.com/api/auth/forgotpassword", { email });
       if(res.data.success){
         toast.success(res.data.message);
         setEmailSent(true); // ✨ Transition to success screen

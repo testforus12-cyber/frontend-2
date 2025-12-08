@@ -128,7 +128,7 @@ const Onboarding: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-4xl w-full bg-white p-8 rounded-2xl shadow-lg space-y-6">
+      <div className="w-full w-full bg-white p-8 rounded-2xl shadow-lg space-y-6">
         <h1 className="text-2xl font-bold text-gray-800 text-center">Vendor Pricing Matrix</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
