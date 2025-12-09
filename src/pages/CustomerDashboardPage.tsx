@@ -5,6 +5,21 @@ import { useAuth } from '../hooks/useAuth';
 import { User, MapPin, Truck as VendorIcon } from 'lucide-react';
 import Cookies from 'js-cookie';
 
+// 🔧 BACKEND BASE URL
+// Local: uses proxy (/api/...)
+// Prod: hits your Render backend.
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? ''
+    : 'https://backend-2-4tjr.onrender.com');
+
+// Helper: build auth headers from cookie
+const buildAuthHeaders = () => {
+  const token = Cookies.get('authToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 // --- Types (keep lightweight and tolerant) ---
 interface UserProfile {
   _id?: string;
@@ -30,8 +45,8 @@ interface UserProfile {
     postalCode?: string;
     country?: string;
   }>;
-  preferredVendorIds?: string[]; // Array of vendor IDs
-  createdAt?: string | number | null; // member since
+  preferredVendorIds?: string[];
+  createdAt?: string | number | null;
 }
 
 interface BasicVendorInfo {
@@ -39,7 +54,6 @@ interface BasicVendorInfo {
   name: string;
 }
 
-// KPI shape returned by /api/dashboard/overview
 type OverviewResp = {
   totalShipments?: number;
   totalSpend?: number;
@@ -52,7 +66,6 @@ type OverviewResp = {
 const formatINR = (n?: number | null) =>
   n == null ? '—' : `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
-// Robust resolver for many shapes: ISO string, number, Mongo {$date: "..."} and nested wrappers
 const resolveCreatedAt = (obj: any): string | number | null => {
   if (!obj) return null;
   if (typeof obj === 'string' && obj.trim().length > 0) return obj;
@@ -69,7 +82,7 @@ const resolveCreatedAt = (obj: any): string | number | null => {
     if (obj.toISOString && typeof obj.toISOString === 'function') {
       try {
         return obj.toISOString();
-      } catch (e) {
+      } catch {
         /* ignore */
       }
     }
@@ -82,7 +95,7 @@ const prettyMembershipDate = (input?: any) => {
   if (!raw) return 'Unknown';
   const d = new Date(raw as any);
   if (isNaN(d.getTime())) return 'Unknown';
-  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); // e.g. "Jul 2025"
+  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 };
 
 // --- Component ---
@@ -98,7 +111,7 @@ const CustomerDashboardPage: React.FC = () => {
 
   const [allVendors, setAllVendors] = useState<BasicVendorInfo[]>([]);
 
-  // Load profile: prefer useAuth() data, but if createdAt missing, fetch server for that field
+  // Load profile
   useEffect(() => {
     let mounted = true;
 
@@ -108,7 +121,6 @@ const CustomerDashboardPage: React.FC = () => {
       try {
         const maybeCustomer = (authUser as any)?.customer || authUser;
 
-        // Build a base profile from authUser (if present)
         let baseProfile: UserProfile | null = null;
         if (
           maybeCustomer &&
@@ -128,8 +140,7 @@ const CustomerDashboardPage: React.FC = () => {
             lastName: maybeCustomer.lastName,
             companyName: maybeCustomer.company || maybeCustomer.companyName,
             email: maybeCustomer.email,
-            contactNumber:
-              maybeCustomer.phone || maybeCustomer.contactNumber,
+            contactNumber: maybeCustomer.phone || maybeCustomer.contactNumber,
             gstNumber: maybeCustomer.gstNo || maybeCustomer.gstNumber,
             billingAddress:
               maybeCustomer.billingAddress || {
@@ -149,48 +160,42 @@ const CustomerDashboardPage: React.FC = () => {
           };
         }
 
-        // If we have a baseProfile but no createdAt, try to fetch just to get createdAt
+        // If we have a baseProfile but no createdAt, fetch it
         if (baseProfile && !baseProfile.createdAt) {
           try {
-            const res = await fetch('/api/users/me', {
-              credentials: 'include',
+            const res = await fetch(`${API_BASE_URL}/api/users/me`, {
+              headers: buildAuthHeaders(),
             });
             if (res.ok) {
               const body = await res.json();
-              const data = body?.data || body; // unwrap {data: {...}}
+              const data = body?.data || body;
               const serverCreatedAt =
                 resolveCreatedAt(data.createdAt) ||
                 resolveCreatedAt(data.created_at) ||
                 null;
               baseProfile.createdAt = serverCreatedAt;
             } else {
-              // server did not return profile; leave baseProfile as-is
               console.warn('profile fetch returned', res.status);
             }
           } catch (e) {
-            console.warn(
-              'failed to fetch /api/users/me for createdAt',
-              e
-            );
+            console.warn('failed to fetch /api/users/me for createdAt', e);
           }
         }
 
-        // If we didn't have baseProfile at all, fetch full profile from server
+        // If we didn't have baseProfile at all, fetch full profile
         if (!baseProfile) {
-          const res = await fetch('/api/users/me', {
-            credentials: 'include',
+          const res = await fetch(`${API_BASE_URL}/api/users/me`, {
+            headers: buildAuthHeaders(),
           });
           if (res.ok) {
             const body = await res.json();
-            const data = body?.data || body; // unwrap {data: {...}}
+            const data = body?.data || body;
 
             baseProfile = {
               _id: data._id || data.id,
               name:
                 data.name ||
-                `${data.firstName || ''} ${
-                  data.lastName || ''
-                }`.trim(),
+                `${data.firstName || ''} ${data.lastName || ''}`.trim(),
               firstName: data.firstName,
               lastName: data.lastName,
               companyName: data.company || data.companyName,
@@ -219,12 +224,12 @@ const CustomerDashboardPage: React.FC = () => {
 
         if (mounted) setProfile(baseProfile);
 
-        // Also fetch temporary transporters (existing logic)
+        // Temporary transporters
         try {
           const token = Cookies.get('authToken');
           if (token && (authUser as any)?._id) {
             const vendorsResponse = await fetch(
-              `/api/transporter/gettemporarytransporters?customerID=${
+              `${API_BASE_URL}/api/transporter/gettemporarytransporters?customerID=${
                 (authUser as any)._id
               }`,
               {
@@ -237,11 +242,9 @@ const CustomerDashboardPage: React.FC = () => {
             if (vendorsResponse.ok) {
               const vendorsData = await vendorsResponse.json();
               if (vendorsData.success && vendorsData.data) {
-                const userVendors: BasicVendorInfo[] =
-                  vendorsData.data.map((v: any) => ({
-                    id: v._id,
-                    name: v.companyName,
-                  }));
+                const userVendors: BasicVendorInfo[] = vendorsData.data.map(
+                  (v: any) => ({ id: v._id, name: v.companyName })
+                );
                 if (mounted) setAllVendors(userVendors);
                 if (
                   mounted &&
@@ -281,18 +284,15 @@ const CustomerDashboardPage: React.FC = () => {
     async function loadOverview() {
       setIsLoadingOverview(true);
       try {
-        const res = await fetch('/api/dashboard/overview', {
-          credentials: 'include',
+        const res = await fetch(`${API_BASE_URL}/api/dashboard/overview`, {
+          headers: buildAuthHeaders(),
         });
         if (!res.ok) throw new Error(`overview failed: ${res.status}`);
         const body = await res.json();
-        const data = (body && (body.data || body)) as OverviewResp; // unwrap {data: {...}}
+        const data = (body && (body.data || body)) as OverviewResp;
         if (mounted) setOverview(data);
       } catch (err) {
-        console.warn(
-          'overview fetch failed, using empty state',
-          err
-        );
+        console.warn('overview fetch failed, using empty state', err);
         if (mounted)
           setOverview({
             totalShipments: 0,
@@ -317,11 +317,7 @@ const CustomerDashboardPage: React.FC = () => {
   };
 
   if (isLoadingProfile)
-    return (
-      <div className="text-center py-10">
-        Loading your dashboard...
-      </div>
-    );
+    return <div className="text-center py-10">Loading your dashboard...</div>;
   if (!isAuthenticated)
     return (
       <div className="text-center py-10">
@@ -346,9 +342,7 @@ const CustomerDashboardPage: React.FC = () => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800">
-              Your Dashboard
-            </h1>
+            <h1 className="text-3xl font-bold text-slate-800">Your Dashboard</h1>
             <p className="text-sm text-slate-500 mt-1">
               Personal &amp; company metrics
             </p>
@@ -368,8 +362,7 @@ const CustomerDashboardPage: React.FC = () => {
           <div className="flex justify-between items-start">
             <div>
               <h3 className="text-lg font-medium text-slate-700 flex items-center gap-2">
-                <User size={18} className="text-blue-600" /> Profile
-                Information
+                <User size={18} className="text-blue-600" /> Profile Information
               </h3>
               <div className="mt-3 text-sm text-slate-700 space-y-1">
                 <div>
@@ -388,9 +381,7 @@ const CustomerDashboardPage: React.FC = () => {
                   {profile.gstNumber ?? '—'}
                 </div>
                 <div>
-                  <span className="font-semibold">
-                    Billing Address:{' '}
-                  </span>
+                  <span className="font-semibold">Billing Address: </span>
                   {profile.billingAddress?.street
                     ? `${profile.billingAddress.street}, ${profile.billingAddress.city}, ${profile.billingAddress.state} - ${profile.billingAddress.postalCode}`
                     : '—'}
@@ -420,17 +411,14 @@ const CustomerDashboardPage: React.FC = () => {
         {/* Pickup Addresses */}
         <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
           <h3 className="text-lg font-medium text-slate-700 mb-3 flex items-center gap-2">
-            <MapPin size={18} className="text-blue-600" /> Pickup
-            Addresses
+            <MapPin size={18} className="text-blue-600" /> Pickup Addresses
           </h3>
-          {profile.pickupAddresses &&
-          profile.pickupAddresses.length > 0 ? (
+          {profile.pickupAddresses && profile.pickupAddresses.length > 0 ? (
             profile.pickupAddresses.map((addr, i) => (
               <div key={i} className="py-2">
                 <div className="font-semibold">{addr.label}</div>
                 <div className="text-slate-500 text-sm">
-                  {addr.street}, {addr.city}, {addr.state} -{' '}
-                  {addr.postalCode}
+                  {addr.street}, {addr.city}, {addr.state} - {addr.postalCode}
                 </div>
               </div>
             ))
@@ -444,8 +432,7 @@ const CustomerDashboardPage: React.FC = () => {
         {/* Preferred Vendors */}
         <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
           <h3 className="text-lg font-medium text-slate-700 mb-3 flex items-center gap-2">
-            <VendorIcon size={18} className="text-blue-600" /> Preferred
-            Vendors
+            <VendorIcon size={18} className="text-blue-600" /> Preferred Vendors
           </h3>
           {profile.preferredVendorIds &&
           profile.preferredVendorIds.length > 0 &&
@@ -486,9 +473,7 @@ const CustomerDashboardPage: React.FC = () => {
           <KpiCard
             title="Total Shipments"
             value={
-              isLoadingOverview
-                ? 'Loading...'
-                : overview?.totalShipments ?? 0
+              isLoadingOverview ? 'Loading...' : overview?.totalShipments ?? 0
             }
           />
           <KpiCard
@@ -514,9 +499,7 @@ const CustomerDashboardPage: React.FC = () => {
                 ? 'Loading...'
                 : formatINR(overview?.totalSavings ?? 0)
             }
-            tone={
-              (overview?.totalSavings ?? 0) >= 0 ? 'green' : 'red'
-            }
+            tone={(overview?.totalSavings ?? 0) >= 0 ? 'green' : 'red'}
           />
         </div>
 
@@ -528,9 +511,9 @@ const CustomerDashboardPage: React.FC = () => {
           <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-slate-600">
             <p className="mb-2 font-semibold">No activity yet</p>
             <p className="text-sm">
-              Your dashboard will populate when you create shipments or
-              enable anonymised data contributions. Try calculating
-              freight or adding a vendor to get started.
+              Your dashboard will populate when you create shipments or enable
+              anonymised data contributions. Try calculating freight or adding a
+              vendor to get started.
             </p>
           </div>
         ) : (
@@ -549,8 +532,8 @@ const CustomerDashboardPage: React.FC = () => {
                 Data source
               </h3>
               <p className="text-sm text-slate-600">
-                Community baseline shown only when sampleCount ≥ 3.
-                Current sample count:
+                Community baseline shown only when sampleCount ≥ 3. Current
+                sample count:
                 <span className="font-medium ml-1">
                   {overview?.sampleCount ?? 0}
                 </span>
@@ -560,10 +543,7 @@ const CustomerDashboardPage: React.FC = () => {
         )}
 
         <div className="mt-8 text-center">
-          <Link
-            to="/"
-            className="text-blue-600 hover:underline"
-          >
+          <Link to="/" className="text-blue-600 hover:underline">
             ← Back to Calculator
           </Link>
         </div>
