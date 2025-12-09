@@ -1,235 +1,371 @@
 // src/pages/CustomerDashboardPage.tsx
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // For any navigation links
-import { useAuth } from '../hooks/useAuth'; // To get user info and logout
-import { User, Settings, MapPin, Truck as VendorIcon, LogOut } from 'lucide-react'; // Example icons
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { User, MapPin, Truck as VendorIcon, LogOut } from 'lucide-react';
 import Cookies from 'js-cookie';
 
-// Placeholder types - these would ideally come from your src/types/index.ts
-// and match what the backend /api/users/me returns
+// --- Types (keep lightweight and tolerant) ---
 interface UserProfile {
-  name: string;
+  _id?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   companyName?: string;
-  email: string;
+  email?: string;
   contactNumber?: string;
   gstNumber?: string;
   billingAddress?: {
-    street: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
   };
   pickupAddresses?: Array<{
-    label: string;
-    street: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
+    label?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
   }>;
   preferredVendorIds?: string[]; // Array of vendor IDs
+  createdAt?: string | number | null; // member since
 }
 
-// Placeholder type for all vendors (for preferred vendor selection)
 interface BasicVendorInfo {
   id: string;
   name: string;
 }
 
+// KPI shape returned by /api/dashboard/overview
+type OverviewResp = {
+  totalShipments?: number;
+  totalSpend?: number;
+  avgCostPerShipment?: number;
+  totalSavings?: number;
+  sampleCount?: number;
+};
+
+// --- Helpers ---
+const formatINR = (n?: number | null) =>
+  n == null ? '—' : `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+// Robust resolver for many shapes: ISO string, number, Mongo {$date: "..."} and nested wrappers
+const resolveCreatedAt = (obj: any): string | number | null => {
+  if (!obj) return null;
+  if (typeof obj === 'string' && obj.trim().length > 0) return obj;
+  if (typeof obj === 'number' && !Number.isNaN(obj)) return obj;
+  if (obj && typeof obj === 'object') {
+    if (obj.$date) return obj.$date;
+    if (obj.$numberLong) {
+      const num = Number(obj.$numberLong);
+      return Number.isNaN(num) ? null : num;
+    }
+    if (obj.createdAt) return resolveCreatedAt(obj.createdAt);
+    if (obj.created_at) return resolveCreatedAt(obj.created_at);
+    if (obj._createdAt) return resolveCreatedAt(obj._createdAt);
+    if (obj.toISOString && typeof obj.toISOString === 'function') {
+      try { return obj.toISOString(); } catch (e) { /* ignore */ }
+    }
+  }
+  return null;
+};
+
+const prettyMembershipDate = (input?: any) => {
+  const raw = resolveCreatedAt(input);
+  if (!raw) return 'Unknown';
+  const d = new Date(raw as any);
+  if (isNaN(d.getTime())) return 'Unknown';
+  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); // e.g. "Jul 2025"
+};
+
+// --- Component ---
 const CustomerDashboardPage: React.FC = () => {
-  const { user, logout, isAuthenticated } = useAuth(); // Assuming useAuth provides user object
-  const navigate = useNavigate(); // From react-router-dom, if not already imported in useAuth for logout
+  const { user: authUser, logout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [allVendors, setAllVendors] = useState<BasicVendorInfo[]>([]); // For preferred vendor selection
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  // TODO: Fetch user profile data when component mounts and user is authenticated
+  const [overview, setOverview] = useState<OverviewResp | null>(null);
+  const [isLoadingOverview, setIsLoadingOverview] = useState(true);
+
+  const [allVendors, setAllVendors] = useState<BasicVendorInfo[]>([]);
+
+  // Load profile: prefer useAuth() data, but if createdAt missing, fetch server for that field
   useEffect(() => {
-    if (isAuthenticated && user) { // 'user' might come from useAuth directly or after a fetch
-      const fetchProfile = async () => {
-        setIsLoading(true);
-        try {
-          // const response = await fetch('/api/users/me'); // ACTUAL API CALL
-          // if (!response.ok) throw new Error('Failed to fetch profile');
-          // const data: UserProfile = await response.json();
-          // setProfile(data);
+    let mounted = true;
+    async function loadProfile() {
+      setIsLoadingProfile(true);
 
-          // Fetch user's added vendors (temporary transporters)
+      try {
+        const maybeCustomer = (authUser as any)?.customer || authUser;
+
+        // Build a base profile from authUser (if present)
+        let baseProfile: UserProfile | null = null;
+        if (maybeCustomer && (maybeCustomer.firstName || maybeCustomer.email || maybeCustomer._id || maybeCustomer.name)) {
+          baseProfile = {
+            _id: maybeCustomer._id || maybeCustomer.id,
+            name: maybeCustomer.name || `${maybeCustomer.firstName || ''} ${maybeCustomer.lastName || ''}`.trim(),
+            firstName: maybeCustomer.firstName,
+            lastName: maybeCustomer.lastName,
+            companyName: maybeCustomer.company || maybeCustomer.companyName,
+            email: maybeCustomer.email,
+            contactNumber: maybeCustomer.phone || maybeCustomer.contactNumber,
+            gstNumber: maybeCustomer.gstNo || maybeCustomer.gstNumber,
+            billingAddress: maybeCustomer.billingAddress || {
+              street: maybeCustomer.address,
+              city: maybeCustomer.city,
+              state: maybeCustomer.state,
+              postalCode: maybeCustomer.pincode?.toString?.(),
+              country: 'India',
+            },
+            pickupAddresses: maybeCustomer.pickupAddresses || [],
+            preferredVendorIds: maybeCustomer.preferredVendors || [],
+            createdAt: resolveCreatedAt(maybeCustomer.createdAt) || resolveCreatedAt(maybeCustomer._createdAt) || resolveCreatedAt((authUser as any)?.createdAt) || null,
+          };
+        }
+
+        // If we have a baseProfile but no createdAt, try to fetch just to get createdAt
+        if (baseProfile && !baseProfile.createdAt) {
+          try {
+            const res = await fetch('/api/users/me', { credentials: 'include' });
+            if (res.ok) {
+              const data = await res.json();
+              const serverCreatedAt = resolveCreatedAt(data.createdAt) || resolveCreatedAt(data.created_at) || null;
+              baseProfile.createdAt = serverCreatedAt;
+            } else {
+              // server did not return profile; leave baseProfile as-is
+              console.warn('profile fetch returned', res.status);
+            }
+          } catch (e) {
+            console.warn('failed to fetch /api/users/me for createdAt', e);
+          }
+        }
+
+        // If we didn't have baseProfile at all, fetch full profile from server
+        if (!baseProfile) {
+          const res = await fetch('/api/users/me', { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            baseProfile = {
+              _id: data._id || data.id,
+              name: data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+              firstName: data.firstName,
+              lastName: data.lastName,
+              companyName: data.company || data.companyName,
+              email: data.email,
+              contactNumber: data.phone || data.contact,
+              gstNumber: data.gstNo || data.gstNumber,
+              billingAddress: data.billingAddress || {
+                street: data.address,
+                city: data.city,
+                state: data.state,
+                postalCode: data.pincode?.toString?.(),
+                country: 'India',
+              },
+              pickupAddresses: data.pickupAddresses || [],
+              preferredVendorIds: data.preferredVendors || [],
+              createdAt: resolveCreatedAt(data.createdAt) || resolveCreatedAt(data.created_at) || null,
+            };
+          } else {
+            console.warn('profile fetch failed', res.status);
+          }
+        }
+
+        if (mounted) setProfile(baseProfile);
+
+        // Also fetch temporary transporters (existing logic)
+        try {
           const token = Cookies.get('authToken');
-          let userVendors: BasicVendorInfo[] = [];
-          
-          if (token) {
-            try {
-              const vendorsResponse = await fetch(`/api/transporter/gettemporarytransporters?customerID=${user._id}`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              
-              if (vendorsResponse.ok) {
-                const vendorsData = await vendorsResponse.json();
-                if (vendorsData.success && vendorsData.data) {
-                  // Convert temporary transporters to BasicVendorInfo format
-                  userVendors = vendorsData.data.map((vendor: any) => ({
-                    id: vendor._id,
-                    name: vendor.companyName
-                  }));
+          if (token && (authUser as any)?._id) {
+            const vendorsResponse = await fetch(`/api/transporter/gettemporarytransporters?customerID=${(authUser as any)._id}`, {
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            });
+            if (vendorsResponse.ok) {
+              const vendorsData = await vendorsResponse.json();
+              if (vendorsData.success && vendorsData.data) {
+                const userVendors: BasicVendorInfo[] = vendorsData.data.map((v: any) => ({ id: v._id, name: v.companyName }));
+                if (mounted) setAllVendors(userVendors);
+                if (mounted && baseProfile && (!baseProfile.preferredVendorIds || baseProfile.preferredVendorIds.length === 0)) {
+                  setProfile((p) => ({ ...(p || {}), preferredVendorIds: userVendors.map(x => x.id) }));
                 }
               }
-            } catch (error) {
-              console.error('Error fetching vendors:', error);
             }
           }
-
-          // Create profile with real user data
-          const userProfile: UserProfile = {
-            name: user?.name || 'Customer Name',
-            companyName: user?.companyName || 'Company Name',
-            email: user?.email || 'customer@example.com',
-            contactNumber: user?.contactNumber || '9876543210',
-            gstNumber: user?.gstNumber || '27ABCDE1234F1Z5',
-            billingAddress: { 
-              street: user?.address || '123 Main St', 
-              city: user?.city || 'Mumbai', 
-              state: user?.state || 'MH', 
-              postalCode: user?.pincode?.toString() || '400001', 
-              country: 'India' 
-            },
-            pickupAddresses: [
-              { label: 'Warehouse A', street: '456 Indl. Area', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India' },
-            ],
-            preferredVendorIds: userVendors.map(v => v.id), // Use all user's vendors as preferred
-          };
-          setProfile(userProfile);
-          setAllVendors(userVendors);
-
-        } catch (error) {
-          console.error("Failed to fetch profile data:", error);
-          // Handle error display
-        } finally {
-          setIsLoading(false);
+        } catch (e) {
+          console.warn('Error fetching user vendors', e);
         }
-      };
-      fetchProfile();
-    } else if (!isAuthenticated && !user) { // If somehow user lands here without auth (e.g. direct nav, then logout)
-        setIsLoading(false); // No data to load
+      } catch (err) {
+        console.error('loadProfile error', err);
+      } finally {
+        if (mounted) setIsLoadingProfile(false);
+      }
     }
-  }, [user, isAuthenticated]); // Re-fetch if user object changes
+
+    if (isAuthenticated) loadProfile();
+    else setIsLoadingProfile(false);
+
+    return () => { mounted = false; };
+  }, [authUser, isAuthenticated]);
+
+  // Load overview KPI
+  useEffect(() => {
+    let mounted = true;
+    async function loadOverview() {
+      setIsLoadingOverview(true);
+      try {
+        const res = await fetch('/api/dashboard/overview', { credentials: 'include' });
+        if (!res.ok) throw new Error(`overview failed: ${res.status}`);
+        const json: OverviewResp = await res.json();
+        if (mounted) setOverview(json);
+      } catch (err) {
+        console.warn('overview fetch failed, using empty state', err);
+        if (mounted) setOverview({ totalShipments: 0, totalSpend: 0, avgCostPerShipment: 0, totalSavings: 0, sampleCount: 0 });
+      } finally {
+        if (mounted) setIsLoadingOverview(false);
+      }
+    }
+    loadOverview();
+    return () => { mounted = false; };
+  }, []);
 
   const handleLogout = () => {
-    logout(); // Call logout from useAuth
-    // useAuth should handle navigation to /signin or homepage
-    // navigate('/signin'); // Or handle navigation in useAuth hook itself after clearing token
+    logout();
+    navigate('/signin');
   };
 
-  if (isLoading) {
-    return <div className="text-center py-10">Loading your dashboard...</div>;
-  }
+  if (isLoadingProfile) return <div className="text-center py-10">Loading your dashboard...</div>;
+  if (!isAuthenticated) return <div className="text-center py-10">Please <Link to="/signin" className="text-blue-600">sign in</Link>.</div>;
+  if (!profile) return <div className="text-center py-10">Could not load profile. Try again later.</div>;
 
-  if (!profile && !isAuthenticated) { // Should be redirected by PrivateRoute, but good check
-      return <div className="text-center py-10">Please <Link to="/signin" className="text-blue-600 hover:underline">sign in</Link> to view your dashboard.</div>;
-  }
-  
-  if (!profile && isAuthenticated) { // Logged in, but profile fetch failed or no profile
-      return <div className="text-center py-10">Could not load profile data. Please try again later or contact support.</div>;
-  }
-
+  const isEmpty = (overview?.totalShipments ?? 0) === 0;
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-800">Your Dashboard</h1>
-        <button
-          onClick={handleLogout}
-          className="flex items-center bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md text-sm"
-        >
-          <LogOut size={16} className="mr-2" />
-          Sign Out
-        </button>
-      </div>
+    <div className="min-h-[60vh]">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">Your Dashboard</h1>
+            <p className="text-sm text-slate-500 mt-1">Personal & company metrics</p>
+          </div>
+          <div>
+            <button onClick={handleLogout} className="px-4 py-2 bg-rose-500 text-white rounded-md">Sign Out</button>
+          </div>
+        </div>
 
-      {/* Profile Section */}
-      <section className="p-6 bg-white rounded-lg shadow">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
-          <User size={20} className="mr-2 text-blue-600" /> Profile Information
-        </h2>
-        {profile && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <p><strong>Name:</strong> {profile.name}</p>
-            <p><strong>Email:</strong> {profile.email}</p>
-            <p><strong>Company:</strong> {profile.companyName || 'N/A'}</p>
-            <p><strong>Contact:</strong> {profile.contactNumber || 'N/A'}</p>
-            <p><strong>GST No:</strong> {profile.gstNumber || 'N/A'}</p>
-            {profile.billingAddress && (
-              <p className="md:col-span-2">
-                <strong>Billing Address:</strong> 
-                {profile.billingAddress.street}, {profile.billingAddress.city}, {profile.billingAddress.state} - {profile.billingAddress.postalCode}
-              </p>
-            )}
+        {/* Profile card */}
+        <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-lg font-medium text-slate-700 flex items-center gap-2">
+                <User size={18} className="text-blue-600" /> Profile Information
+              </h3>
+              <div className="mt-3 text-sm text-slate-700 space-y-1">
+                <div><span className="font-semibold">Name: </span>{profile.name ?? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()}</div>
+                <div><span className="font-semibold">Company: </span>{profile.companyName ?? '—'}</div>
+                <div><span className="font-semibold">GST No: </span>{profile.gstNumber ?? '—'}</div>
+                <div><span className="font-semibold">Billing Address: </span>{profile.billingAddress?.street ? `${profile.billingAddress.street}, ${profile.billingAddress.city}, ${profile.billingAddress.state} - ${profile.billingAddress.postalCode}` : '—'}</div>
+              </div>
+            </div>
+
+            <div className="text-right text-sm text-slate-600">
+              <div className="mb-2"><span className="font-semibold">Email:</span> {profile.email ?? '—'}</div>
+              <div className="mb-2"><span className="font-semibold">Contact:</span> {profile.contactNumber ?? '—'}</div>
+              <div><span className="font-semibold">Member since:</span> <span className="ml-1">{prettyMembershipDate(profile.createdAt)}</span></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pickup Addresses */}
+        <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
+          <h3 className="text-lg font-medium text-slate-700 mb-3 flex items-center gap-2">
+            <MapPin size={18} className="text-blue-600" /> Pickup Addresses
+          </h3>
+          {profile.pickupAddresses && profile.pickupAddresses.length > 0 ? (
+            profile.pickupAddresses.map((addr, i) => (
+              <div key={i} className="py-2">
+                <div className="font-semibold">{addr.label}</div>
+                <div className="text-slate-500 text-sm">{addr.street}, {addr.city}, {addr.state} - {addr.postalCode}</div>
+              </div>
+            ))
+          ) : (
+            <div className="text-slate-500 text-sm">No pickup addresses configured.</div>
+          )}
+        </div>
+
+        {/* Preferred Vendors */}
+        <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
+          <h3 className="text-lg font-medium text-slate-700 mb-3 flex items-center gap-2">
+            <VendorIcon size={18} className="text-blue-600" /> Preferred Vendors
+          </h3>
+          {profile.preferredVendorIds && profile.preferredVendorIds.length > 0 && allVendors.length > 0 ? (
+            <ul className="space-y-2">
+              {profile.preferredVendorIds.map(vendorId => {
+                const preferredVendor = allVendors.find(v => v.id === vendorId);
+                return preferredVendor ? (
+                  <li key={vendorId} className="p-3 bg-gray-50 rounded-md text-sm">{preferredVendor.name}</li>
+                ) : null;
+              })}
+            </ul>
+          ) : (
+            <div className="text-slate-500 text-sm">No preferred vendors selected.</div>
+          )}
+
+          <div className="mt-4">
+            <Link to="/my-vendors" className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md text-sm">
+              <VendorIcon size={16} /> Manage Vendors
+            </Link>
+          </div>
+        </div>
+
+        {/* KPI cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <KpiCard title="Total Shipments" value={isLoadingOverview ? 'Loading...' : overview?.totalShipments ?? 0} />
+          <KpiCard title="Total Spend" value={isLoadingOverview ? 'Loading...' : formatINR(overview?.totalSpend ?? 0)} />
+          <KpiCard title="Avg Cost / Shipment" value={isLoadingOverview ? 'Loading...' : formatINR(overview?.avgCostPerShipment ?? 0)} />
+          <KpiCard title="Estimated Savings" value={isLoadingOverview ? 'Loading...' : formatINR(overview?.totalSavings ?? 0)} tone={(overview?.totalSavings ?? 0) >= 0 ? 'green' : 'red'} />
+        </div>
+
+        {isLoadingOverview ? (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-12 text-center text-slate-600">Loading your dashboard...</div>
+        ) : isEmpty ? (
+          <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-slate-600">
+            <p className="mb-2 font-semibold">No activity yet</p>
+            <p className="text-sm">Your dashboard will populate when you create shipments or enable anonymised data contributions. Try calculating freight or adding a vendor to get started.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="col-span-2 bg-white border rounded-lg p-6">
+              <h3 className="text-sm font-medium text-slate-700 mb-3">Savings over time</h3>
+              <div className="h-44 flex items-center justify-center text-sm text-slate-400">(Chart placeholder)</div>
+            </div>
+
+            <div className="bg-white border rounded-lg p-6">
+              <h3 className="text-sm font-medium text-slate-700 mb-3">Data source</h3>
+              <p className="text-sm text-slate-600">Community baseline shown only when sampleCount ≥ 3. Current sample count: <span className="font-medium ml-1">{overview?.sampleCount ?? 0}</span></p>
+            </div>
           </div>
         )}
-        {/* TODO: Add "Edit Profile" button and modal/form */}
-      </section>
 
-      {/* Pickup Addresses Section */}
-      <section className="p-6 bg-white rounded-lg shadow">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
-          <MapPin size={20} className="mr-2 text-blue-600" /> Pickup Addresses
-        </h2>
-        {profile?.pickupAddresses && profile.pickupAddresses.length > 0 ? (
-          <ul className="space-y-2">
-            {profile.pickupAddresses.map((addr, index) => (
-              <li key={index} className="p-3 bg-gray-50 rounded-md text-sm">
-                <strong>{addr.label}:</strong> {addr.street}, {addr.city}, {addr.state} - {addr.postalCode}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-gray-500">No pickup addresses saved.</p>
-        )}
-        {/* TODO: Add "Manage Pickup Addresses" button and modal/form */}
-      </section>
-
-      {/* Preferred Vendors Section */}
-      <section className="p-6 bg-white rounded-lg shadow">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
-          <VendorIcon size={20} className="mr-2 text-blue-600" /> Preferred Vendors
-        </h2>
-        {profile?.preferredVendorIds && profile.preferredVendorIds.length > 0 && allVendors.length > 0 ? (
-          <ul className="space-y-2">
-            {profile.preferredVendorIds.map(vendorId => {
-              const preferredVendor = allVendors.find(v => v.id === vendorId);
-              return preferredVendor ? (
-                <li key={vendorId} className="p-3 bg-gray-50 rounded-md text-sm">
-                  {preferredVendor.name}
-                </li>
-              ) : null;
-            })}
-          </ul>
-        ) : (
-          <p className="text-sm text-gray-500">No preferred vendors selected.</p>
-        )}
-        <div className="mt-4">
-          <Link 
-            to="/my-vendors" 
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
-          >
-            <VendorIcon size={16} className="mr-2" />
-            Manage Vendors
-          </Link>
+        <div className="mt-8 text-center">
+          <Link to="/" className="text-blue-600 hover:underline">← Back to Calculator</Link>
         </div>
-      </section>
-
-      <div className="mt-8 text-center">
-          <Link to="/" className="text-blue-600 hover:underline">
-            ← Back to Calculator
-          </Link>
       </div>
     </div>
   );
 };
+
+function KpiCard({ title, value, tone = 'neutral' }: { title: string; value: React.ReactNode; tone?: 'neutral' | 'green' | 'red' }) {
+  const toneClass = tone === 'green' ? 'text-emerald-600' : tone === 'red' ? 'text-rose-600' : 'text-slate-800';
+  return (
+    <div className="bg-white border rounded-lg p-4 shadow-sm">
+      <div className="text-xs text-slate-500">{title}</div>
+      <div className={`mt-2 text-xl font-semibold ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
 
 export default CustomerDashboardPage;

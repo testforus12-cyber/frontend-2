@@ -46,7 +46,7 @@ export const CompanySection: React.FC<CompanySectionProps> = ({
             htmlFor="legalCompanyName"
             className="block text-xs font-semibold text-slate-600 uppercase tracking-wider"
           >
-            Legal Company Name <span className="text-red-500">*</span>
+          Legal Transporter Name <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -228,7 +228,7 @@ export const CompanySection: React.FC<CompanySectionProps> = ({
             htmlFor="subVendor"
             className="block text-xs font-semibold text-slate-600 uppercase tracking-wider"
           >
-            Sub Vendor
+            Sub Transporter
           </label>
           <input
             type="text"
@@ -263,7 +263,7 @@ export const CompanySection: React.FC<CompanySectionProps> = ({
             htmlFor="vendorCode"
             className="block text-xs font-semibold text-slate-600 uppercase tracking-wider"
           >
-            Vendor Code
+            Transporter Code
           </label>
           <input
             type="text"
@@ -426,71 +426,71 @@ export const CompanySection: React.FC<CompanySectionProps> = ({
         </div>
 
         {/* Service Modes */}
-        <div>
-          <label
-            className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1"
-          >
-            Service Modes <span className="text-red-500">*</span>
-          </label>
-          <div className="mt-1 inline-flex rounded-lg border border-slate-300 bg-slate-50/70 p-1 shadow-sm">
-            {/* FTL */}
-            <button
-              type="button"
-              onClick={() => {
-                setField('serviceMode', 'FTL');
-                // ✅ FIX: Don't validate on selection - only clear error if exists
-                if (errors.serviceMode) {
-                  validateField('serviceMode');
-                }
-              }}
-              onDoubleClick={() => {
-                if (basics.serviceMode === 'FTL') {
-                  setField('serviceMode', null);
-                  // ✅ FIX: Only validate on deselection (this triggers error)
-                  validateField('serviceMode');
-                }
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition
-                ${
-                  basics.serviceMode === 'FTL'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-transparent text-slate-700 hover:bg-slate-100'
-                }`}
-            >
-              FTL
-            </button>
+<div className="md:col-span-1">
+  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+    Service Modes <span className="text-red-500">*</span>
+  </label>
 
-            {/* LTL */}
-            <button
-              type="button"
-              onClick={() => {
-                setField('serviceMode', 'LTL');
-                // ✅ FIX: Don't validate on selection - only clear error if exists
-                if (errors.serviceMode) {
-                  validateField('serviceMode');
-                }
-              }}
-              onDoubleClick={() => {
-                if (basics.serviceMode === 'LTL') {
-                  setField('serviceMode', null);
-                  // ✅ FIX: Only validate on deselection (this triggers error)
-                  validateField('serviceMode');
-                }
-              }}
-              className={`ml-1 px-3 py-1.5 text-xs font-semibold rounded-md transition
-                ${
-                  basics.serviceMode === 'LTL'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-transparent text-slate-700 hover:bg-slate-100'
-                }`}
-            >
-              LTL
-            </button>
-          </div>
-          {errors.serviceMode && (
-            <p className="mt-1 text-xs text-red-600">{errors.serviceMode}</p>
-          )}
-        </div>
+  <div className="mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="inline-flex items-center gap-3">
+
+      {/* FTL */}
+      <button
+        type="button"
+        onClick={() => {
+          setField('serviceMode', 'FTL');
+          if (errors.serviceMode) validateField('serviceMode');
+        }}
+        onDoubleClick={() => {
+          if (basics.serviceMode === 'FTL') {
+            setField('serviceMode', null);
+            validateField('serviceMode');
+          }
+        }}
+        aria-pressed={basics.serviceMode === 'FTL'}
+        className={`inline-flex items-center justify-center min-w-[76px] px-5 py-2 text-sm font-semibold rounded-lg transition-all outline-none
+          focus:ring-2 focus:ring-blue-400 focus:ring-offset-1
+          ${
+            basics.serviceMode === 'FTL'
+              ? 'bg-blue-600 text-white border-2 border-blue-700 shadow'
+              : 'bg-white text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 hover:shadow-md'
+          }`}
+      >
+        FTL
+      </button>
+
+      {/* LTL */}
+      <button
+        type="button"
+        onClick={() => {
+          setField('serviceMode', 'LTL');
+          if (errors.serviceMode) validateField('serviceMode');
+        }}
+        onDoubleClick={() => {
+          if (basics.serviceMode === 'LTL') {
+            setField('serviceMode', null);
+            validateField('serviceMode');
+          }
+        }}
+        aria-pressed={basics.serviceMode === 'LTL'}
+        className={`inline-flex items-center justify-center min-w-[76px] px-5 py-2 text-sm font-semibold rounded-lg transition-all outline-none
+          focus:ring-2 focus:ring-blue-400 focus:ring-offset-1
+          ${
+            basics.serviceMode === 'LTL'
+              ? 'bg-blue-600 text-white border-2 border-blue-700 shadow'
+              : 'bg-white text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 hover:shadow-md'
+          }`}
+      >
+        LTL
+      </button>
+    </div>
+
+    {errors.serviceMode && (
+      <p className="mt-2 text-xs text-red-600">{errors.serviceMode}</p>
+    )}
+  </div>
+</div>
+
 
         {/* Company Rating (Slider) */}
         <div>

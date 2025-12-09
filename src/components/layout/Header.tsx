@@ -1,3 +1,4 @@
+// File: components/Header.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -102,13 +103,16 @@ const UserProfileDropdown = () => {
               >
                 <UserIcon size={16} /> Profile
               </Link>
+
+              {/* DUPLICATE DASHBOARD LINK (now correct) */}
               <Link
-                to="/compare"
+                to="/dashboard"
                 onClick={() => setIsOpen(false)}
                 className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-md"
               >
                 <LayoutDashboard size={16} /> Dashboard
               </Link>
+
               <Link
                 to="/my-vendors"
                 onClick={() => setIsOpen(false)}
@@ -131,9 +135,11 @@ const UserProfileDropdown = () => {
   );
 };
 
-// --- MOBILE NAVIGATION (This is the component with the updated animation) ---
+// --- MOBILE NAVIGATION (updated) ---
 const MobileNav = ({ isOpen, closeMenu }: { isOpen: boolean; closeMenu: () => void }) => {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, user } = useAuth();
+  const isAdmin = !!user && (user.role === 'admin' || user.role === 'superadmin');
+
   const handleSignOut = () => {
     logout();
     closeMenu();
@@ -159,7 +165,6 @@ const MobileNav = ({ isOpen, closeMenu }: { isOpen: boolean; closeMenu: () => vo
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={closeMenu}
         >
-          {/* ✨ UPDATED: Position set to right-0 and animations changed to slide from the right */}
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -177,7 +182,8 @@ const MobileNav = ({ isOpen, closeMenu }: { isOpen: boolean; closeMenu: () => vo
             <div className="flex flex-col gap-1 text-base font-medium text-slate-800">
               {isAuthenticated && (
                 <>
-                  <MobileNavLink to="/compare">
+                  {/* MOBILE: Dashboard now links to /dashboard */}
+                  <MobileNavLink to="/dashboard">
                     <LayoutDashboard size={20} className="text-blue-600" /> Dashboard
                   </MobileNavLink>
                   <MobileNavLink to="/my-vendors">
@@ -187,16 +193,22 @@ const MobileNav = ({ isOpen, closeMenu }: { isOpen: boolean; closeMenu: () => vo
                     <UserIcon size={20} className="text-blue-600" /> Profile
                   </MobileNavLink>
                   <hr className="border-slate-200 my-3" />
-                  <h3 className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Admin
-                  </h3>
-                  <MobileNavLink to="/addtransporter">
-                    <Truck size={20} className="text-blue-600" /> Add Transporter
-                  </MobileNavLink>
-                  <MobileNavLink to="/addvendor">
-                    <PackagePlus size={20} className="text-blue-600" /> Add Tied-up Vendor
-                  </MobileNavLink>
-                  <hr className="border-slate-200 my-3" />
+
+                  {/* ADMIN-ONLY BLOCK (showing only for admin/superadmin) */}
+                  {isAdmin && (
+                    <>
+                      <h3 className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                        Admin
+                      </h3>
+                      <MobileNavLink to="/addtransporter">
+                        <Truck size={20} className="text-blue-600" /> Add Transporter
+                      </MobileNavLink>
+                      <MobileNavLink to="/addvendor">
+                        <PackagePlus size={20} className="text-blue-600" /> Add Tied-up Vendor
+                      </MobileNavLink>
+                      <hr className="border-slate-200 my-3" />
+                    </>
+                  )}
                 </>
               )}
               <MobileNavLink to="/about">About Us</MobileNavLink>
@@ -233,8 +245,11 @@ const MobileNav = ({ isOpen, closeMenu }: { isOpen: boolean; closeMenu: () => vo
 
 // --- MAIN HEADER COMPONENT (FIXED) ---
 const Header: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // small helper for admin visibility in the desktop nav
+  const isAdmin = !!user && (user.role === 'admin' || user.role === 'superadmin');
 
   return (
     <>
@@ -254,12 +269,32 @@ const Header: React.FC = () => {
               <div className="hidden sm:flex items-center gap-4">
                 {isAuthenticated ? (
                   <>
+                    {/* PRIMARY CTA: Calculate Freight (new) */}
                     <Link
                       to="/compare"
                       className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-blue-700"
                     >
+                      Calculate Freight
+                    </Link>
+
+                    {/* SECONDARY CTA: Dashboard (new) */}
+                    <Link
+                      to="/dashboard"
+                      className="px-4 py-2 bg-white border text-sm font-semibold rounded-lg hover:bg-slate-50"
+                    >
                       Dashboard
                     </Link>
+
+                    {/* Admin button (desktop) - show only for admin */}
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        className="px-3 py-2 bg-white border text-sm font-medium rounded-lg hover:bg-slate-50"
+                      >
+                        Admin
+                      </Link>
+                    )}
+
                     <UserProfileDropdown />
                   </>
                 ) : (

@@ -429,10 +429,10 @@ useEffect(() => {
 
     // ---- basic text length and required checks ----
     if (!legalName || legalName.trim().length === 0) {
-      errs.push('Legal company name is required (max 60 chars).');
+      errs.push('Legal Transporter name is required (max 60 chars).');
     }
     if (legalName.trim().length > 60) {
-      errs.push('Legal company name must be at most 60 characters.');
+      errs.push('Legal Transporter name must be at most 60 characters.');
     }
 
     if (!contactPerson || contactPerson.trim().length === 0) {
