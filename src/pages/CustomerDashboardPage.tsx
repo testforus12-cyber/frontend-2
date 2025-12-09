@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { User, MapPin, Truck as VendorIcon, LogOut } from 'lucide-react';
+import { User, MapPin, Truck as VendorIcon } from 'lucide-react';
 import Cookies from 'js-cookie';
 
 // --- Types (keep lightweight and tolerant) ---
@@ -67,7 +67,11 @@ const resolveCreatedAt = (obj: any): string | number | null => {
     if (obj.created_at) return resolveCreatedAt(obj.created_at);
     if (obj._createdAt) return resolveCreatedAt(obj._createdAt);
     if (obj.toISOString && typeof obj.toISOString === 'function') {
-      try { return obj.toISOString(); } catch (e) { /* ignore */ }
+      try {
+        return obj.toISOString();
+      } catch (e) {
+        /* ignore */
+      }
     }
   }
   return null;
@@ -97,6 +101,7 @@ const CustomerDashboardPage: React.FC = () => {
   // Load profile: prefer useAuth() data, but if createdAt missing, fetch server for that field
   useEffect(() => {
     let mounted = true;
+
     async function loadProfile() {
       setIsLoadingProfile(true);
 
@@ -105,70 +110,107 @@ const CustomerDashboardPage: React.FC = () => {
 
         // Build a base profile from authUser (if present)
         let baseProfile: UserProfile | null = null;
-        if (maybeCustomer && (maybeCustomer.firstName || maybeCustomer.email || maybeCustomer._id || maybeCustomer.name)) {
+        if (
+          maybeCustomer &&
+          (maybeCustomer.firstName ||
+            maybeCustomer.email ||
+            maybeCustomer._id ||
+            maybeCustomer.name)
+        ) {
           baseProfile = {
             _id: maybeCustomer._id || maybeCustomer.id,
-            name: maybeCustomer.name || `${maybeCustomer.firstName || ''} ${maybeCustomer.lastName || ''}`.trim(),
+            name:
+              maybeCustomer.name ||
+              `${maybeCustomer.firstName || ''} ${
+                maybeCustomer.lastName || ''
+              }`.trim(),
             firstName: maybeCustomer.firstName,
             lastName: maybeCustomer.lastName,
             companyName: maybeCustomer.company || maybeCustomer.companyName,
             email: maybeCustomer.email,
-            contactNumber: maybeCustomer.phone || maybeCustomer.contactNumber,
+            contactNumber:
+              maybeCustomer.phone || maybeCustomer.contactNumber,
             gstNumber: maybeCustomer.gstNo || maybeCustomer.gstNumber,
-            billingAddress: maybeCustomer.billingAddress || {
-              street: maybeCustomer.address,
-              city: maybeCustomer.city,
-              state: maybeCustomer.state,
-              postalCode: maybeCustomer.pincode?.toString?.(),
-              country: 'India',
-            },
+            billingAddress:
+              maybeCustomer.billingAddress || {
+                street: maybeCustomer.address,
+                city: maybeCustomer.city,
+                state: maybeCustomer.state,
+                postalCode: maybeCustomer.pincode?.toString?.(),
+                country: 'India',
+              },
             pickupAddresses: maybeCustomer.pickupAddresses || [],
             preferredVendorIds: maybeCustomer.preferredVendors || [],
-            createdAt: resolveCreatedAt(maybeCustomer.createdAt) || resolveCreatedAt(maybeCustomer._createdAt) || resolveCreatedAt((authUser as any)?.createdAt) || null,
+            createdAt:
+              resolveCreatedAt(maybeCustomer.createdAt) ||
+              resolveCreatedAt(maybeCustomer._createdAt) ||
+              resolveCreatedAt((authUser as any)?.createdAt) ||
+              null,
           };
         }
 
         // If we have a baseProfile but no createdAt, try to fetch just to get createdAt
         if (baseProfile && !baseProfile.createdAt) {
           try {
-            const res = await fetch('/api/users/me', { credentials: 'include' });
+            const res = await fetch('/api/users/me', {
+              credentials: 'include',
+            });
             if (res.ok) {
-              const data = await res.json();
-              const serverCreatedAt = resolveCreatedAt(data.createdAt) || resolveCreatedAt(data.created_at) || null;
+              const body = await res.json();
+              const data = body?.data || body; // unwrap {data: {...}}
+              const serverCreatedAt =
+                resolveCreatedAt(data.createdAt) ||
+                resolveCreatedAt(data.created_at) ||
+                null;
               baseProfile.createdAt = serverCreatedAt;
             } else {
               // server did not return profile; leave baseProfile as-is
               console.warn('profile fetch returned', res.status);
             }
           } catch (e) {
-            console.warn('failed to fetch /api/users/me for createdAt', e);
+            console.warn(
+              'failed to fetch /api/users/me for createdAt',
+              e
+            );
           }
         }
 
         // If we didn't have baseProfile at all, fetch full profile from server
         if (!baseProfile) {
-          const res = await fetch('/api/users/me', { credentials: 'include' });
+          const res = await fetch('/api/users/me', {
+            credentials: 'include',
+          });
           if (res.ok) {
-            const data = await res.json();
+            const body = await res.json();
+            const data = body?.data || body; // unwrap {data: {...}}
+
             baseProfile = {
               _id: data._id || data.id,
-              name: data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+              name:
+                data.name ||
+                `${data.firstName || ''} ${
+                  data.lastName || ''
+                }`.trim(),
               firstName: data.firstName,
               lastName: data.lastName,
               companyName: data.company || data.companyName,
               email: data.email,
               contactNumber: data.phone || data.contact,
               gstNumber: data.gstNo || data.gstNumber,
-              billingAddress: data.billingAddress || {
-                street: data.address,
-                city: data.city,
-                state: data.state,
-                postalCode: data.pincode?.toString?.(),
-                country: 'India',
-              },
+              billingAddress:
+                data.billingAddress || {
+                  street: data.address,
+                  city: data.city,
+                  state: data.state,
+                  postalCode: data.pincode?.toString?.(),
+                  country: 'India',
+                },
               pickupAddresses: data.pickupAddresses || [],
               preferredVendorIds: data.preferredVendors || [],
-              createdAt: resolveCreatedAt(data.createdAt) || resolveCreatedAt(data.created_at) || null,
+              createdAt:
+                resolveCreatedAt(data.createdAt) ||
+                resolveCreatedAt(data.created_at) ||
+                null,
             };
           } else {
             console.warn('profile fetch failed', res.status);
@@ -181,16 +223,36 @@ const CustomerDashboardPage: React.FC = () => {
         try {
           const token = Cookies.get('authToken');
           if (token && (authUser as any)?._id) {
-            const vendorsResponse = await fetch(`/api/transporter/gettemporarytransporters?customerID=${(authUser as any)._id}`, {
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            });
+            const vendorsResponse = await fetch(
+              `/api/transporter/gettemporarytransporters?customerID=${
+                (authUser as any)._id
+              }`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
             if (vendorsResponse.ok) {
               const vendorsData = await vendorsResponse.json();
               if (vendorsData.success && vendorsData.data) {
-                const userVendors: BasicVendorInfo[] = vendorsData.data.map((v: any) => ({ id: v._id, name: v.companyName }));
+                const userVendors: BasicVendorInfo[] =
+                  vendorsData.data.map((v: any) => ({
+                    id: v._id,
+                    name: v.companyName,
+                  }));
                 if (mounted) setAllVendors(userVendors);
-                if (mounted && baseProfile && (!baseProfile.preferredVendorIds || baseProfile.preferredVendorIds.length === 0)) {
-                  setProfile((p) => ({ ...(p || {}), preferredVendorIds: userVendors.map(x => x.id) }));
+                if (
+                  mounted &&
+                  baseProfile &&
+                  (!baseProfile.preferredVendorIds ||
+                    baseProfile.preferredVendorIds.length === 0)
+                ) {
+                  setProfile((p) => ({
+                    ...(p || {}),
+                    preferredVendorIds: userVendors.map((x) => x.id),
+                  }));
                 }
               }
             }
@@ -208,7 +270,9 @@ const CustomerDashboardPage: React.FC = () => {
     if (isAuthenticated) loadProfile();
     else setIsLoadingProfile(false);
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [authUser, isAuthenticated]);
 
   // Load overview KPI
@@ -217,19 +281,34 @@ const CustomerDashboardPage: React.FC = () => {
     async function loadOverview() {
       setIsLoadingOverview(true);
       try {
-        const res = await fetch('/api/dashboard/overview', { credentials: 'include' });
+        const res = await fetch('/api/dashboard/overview', {
+          credentials: 'include',
+        });
         if (!res.ok) throw new Error(`overview failed: ${res.status}`);
-        const json: OverviewResp = await res.json();
-        if (mounted) setOverview(json);
+        const body = await res.json();
+        const data = (body && (body.data || body)) as OverviewResp; // unwrap {data: {...}}
+        if (mounted) setOverview(data);
       } catch (err) {
-        console.warn('overview fetch failed, using empty state', err);
-        if (mounted) setOverview({ totalShipments: 0, totalSpend: 0, avgCostPerShipment: 0, totalSavings: 0, sampleCount: 0 });
+        console.warn(
+          'overview fetch failed, using empty state',
+          err
+        );
+        if (mounted)
+          setOverview({
+            totalShipments: 0,
+            totalSpend: 0,
+            avgCostPerShipment: 0,
+            totalSavings: 0,
+            sampleCount: 0,
+          });
       } finally {
         if (mounted) setIsLoadingOverview(false);
       }
     }
     loadOverview();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleLogout = () => {
@@ -237,9 +316,28 @@ const CustomerDashboardPage: React.FC = () => {
     navigate('/signin');
   };
 
-  if (isLoadingProfile) return <div className="text-center py-10">Loading your dashboard...</div>;
-  if (!isAuthenticated) return <div className="text-center py-10">Please <Link to="/signin" className="text-blue-600">sign in</Link>.</div>;
-  if (!profile) return <div className="text-center py-10">Could not load profile. Try again later.</div>;
+  if (isLoadingProfile)
+    return (
+      <div className="text-center py-10">
+        Loading your dashboard...
+      </div>
+    );
+  if (!isAuthenticated)
+    return (
+      <div className="text-center py-10">
+        Please{' '}
+        <Link to="/signin" className="text-blue-600">
+          sign in
+        </Link>
+        .
+      </div>
+    );
+  if (!profile)
+    return (
+      <div className="text-center py-10">
+        Could not load profile. Try again later.
+      </div>
+    );
 
   const isEmpty = (overview?.totalShipments ?? 0) === 0;
 
@@ -248,11 +346,20 @@ const CustomerDashboardPage: React.FC = () => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800">Your Dashboard</h1>
-            <p className="text-sm text-slate-500 mt-1">Personal & company metrics</p>
+            <h1 className="text-3xl font-bold text-slate-800">
+              Your Dashboard
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Personal &amp; company metrics
+            </p>
           </div>
           <div>
-            <button onClick={handleLogout} className="px-4 py-2 bg-rose-500 text-white rounded-md">Sign Out</button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-rose-500 text-white rounded-md"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
 
@@ -261,20 +368,51 @@ const CustomerDashboardPage: React.FC = () => {
           <div className="flex justify-between items-start">
             <div>
               <h3 className="text-lg font-medium text-slate-700 flex items-center gap-2">
-                <User size={18} className="text-blue-600" /> Profile Information
+                <User size={18} className="text-blue-600" /> Profile
+                Information
               </h3>
               <div className="mt-3 text-sm text-slate-700 space-y-1">
-                <div><span className="font-semibold">Name: </span>{profile.name ?? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()}</div>
-                <div><span className="font-semibold">Company: </span>{profile.companyName ?? '—'}</div>
-                <div><span className="font-semibold">GST No: </span>{profile.gstNumber ?? '—'}</div>
-                <div><span className="font-semibold">Billing Address: </span>{profile.billingAddress?.street ? `${profile.billingAddress.street}, ${profile.billingAddress.city}, ${profile.billingAddress.state} - ${profile.billingAddress.postalCode}` : '—'}</div>
+                <div>
+                  <span className="font-semibold">Name: </span>
+                  {profile.name ??
+                    `${profile.firstName ?? ''} ${
+                      profile.lastName ?? ''
+                    }`.trim()}
+                </div>
+                <div>
+                  <span className="font-semibold">Company: </span>
+                  {profile.companyName ?? '—'}
+                </div>
+                <div>
+                  <span className="font-semibold">GST No: </span>
+                  {profile.gstNumber ?? '—'}
+                </div>
+                <div>
+                  <span className="font-semibold">
+                    Billing Address:{' '}
+                  </span>
+                  {profile.billingAddress?.street
+                    ? `${profile.billingAddress.street}, ${profile.billingAddress.city}, ${profile.billingAddress.state} - ${profile.billingAddress.postalCode}`
+                    : '—'}
+                </div>
               </div>
             </div>
 
             <div className="text-right text-sm text-slate-600">
-              <div className="mb-2"><span className="font-semibold">Email:</span> {profile.email ?? '—'}</div>
-              <div className="mb-2"><span className="font-semibold">Contact:</span> {profile.contactNumber ?? '—'}</div>
-              <div><span className="font-semibold">Member since:</span> <span className="ml-1">{prettyMembershipDate(profile.createdAt)}</span></div>
+              <div className="mb-2">
+                <span className="font-semibold">Email:</span>{' '}
+                {profile.email ?? '—'}
+              </div>
+              <div className="mb-2">
+                <span className="font-semibold">Contact:</span>{' '}
+                {profile.contactNumber ?? '—'}
+              </div>
+              <div>
+                <span className="font-semibold">Member since:</span>
+                <span className="ml-1">
+                  {prettyMembershipDate(profile.createdAt)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -282,40 +420,62 @@ const CustomerDashboardPage: React.FC = () => {
         {/* Pickup Addresses */}
         <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
           <h3 className="text-lg font-medium text-slate-700 mb-3 flex items-center gap-2">
-            <MapPin size={18} className="text-blue-600" /> Pickup Addresses
+            <MapPin size={18} className="text-blue-600" /> Pickup
+            Addresses
           </h3>
-          {profile.pickupAddresses && profile.pickupAddresses.length > 0 ? (
+          {profile.pickupAddresses &&
+          profile.pickupAddresses.length > 0 ? (
             profile.pickupAddresses.map((addr, i) => (
               <div key={i} className="py-2">
                 <div className="font-semibold">{addr.label}</div>
-                <div className="text-slate-500 text-sm">{addr.street}, {addr.city}, {addr.state} - {addr.postalCode}</div>
+                <div className="text-slate-500 text-sm">
+                  {addr.street}, {addr.city}, {addr.state} -{' '}
+                  {addr.postalCode}
+                </div>
               </div>
             ))
           ) : (
-            <div className="text-slate-500 text-sm">No pickup addresses configured.</div>
+            <div className="text-slate-500 text-sm">
+              No pickup addresses configured.
+            </div>
           )}
         </div>
 
         {/* Preferred Vendors */}
         <div className="bg-white border rounded-lg p-5 mb-6 shadow-sm">
           <h3 className="text-lg font-medium text-slate-700 mb-3 flex items-center gap-2">
-            <VendorIcon size={18} className="text-blue-600" /> Preferred Vendors
+            <VendorIcon size={18} className="text-blue-600" /> Preferred
+            Vendors
           </h3>
-          {profile.preferredVendorIds && profile.preferredVendorIds.length > 0 && allVendors.length > 0 ? (
+          {profile.preferredVendorIds &&
+          profile.preferredVendorIds.length > 0 &&
+          allVendors.length > 0 ? (
             <ul className="space-y-2">
-              {profile.preferredVendorIds.map(vendorId => {
-                const preferredVendor = allVendors.find(v => v.id === vendorId);
+              {profile.preferredVendorIds.map((vendorId) => {
+                const preferredVendor = allVendors.find(
+                  (v) => v.id === vendorId
+                );
                 return preferredVendor ? (
-                  <li key={vendorId} className="p-3 bg-gray-50 rounded-md text-sm">{preferredVendor.name}</li>
+                  <li
+                    key={vendorId}
+                    className="p-3 bg-gray-50 rounded-md text-sm"
+                  >
+                    {preferredVendor.name}
+                  </li>
                 ) : null;
               })}
             </ul>
           ) : (
-            <div className="text-slate-500 text-sm">No preferred vendors selected.</div>
+            <div className="text-slate-500 text-sm">
+              No preferred vendors selected.
+            </div>
           )}
 
           <div className="mt-4">
-            <Link to="/my-vendors" className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md text-sm">
+            <Link
+              to="/my-vendors"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md text-sm"
+            >
               <VendorIcon size={16} /> Manage Vendors
             </Link>
           </div>
@@ -323,47 +483,116 @@ const CustomerDashboardPage: React.FC = () => {
 
         {/* KPI cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <KpiCard title="Total Shipments" value={isLoadingOverview ? 'Loading...' : overview?.totalShipments ?? 0} />
-          <KpiCard title="Total Spend" value={isLoadingOverview ? 'Loading...' : formatINR(overview?.totalSpend ?? 0)} />
-          <KpiCard title="Avg Cost / Shipment" value={isLoadingOverview ? 'Loading...' : formatINR(overview?.avgCostPerShipment ?? 0)} />
-          <KpiCard title="Estimated Savings" value={isLoadingOverview ? 'Loading...' : formatINR(overview?.totalSavings ?? 0)} tone={(overview?.totalSavings ?? 0) >= 0 ? 'green' : 'red'} />
+          <KpiCard
+            title="Total Shipments"
+            value={
+              isLoadingOverview
+                ? 'Loading...'
+                : overview?.totalShipments ?? 0
+            }
+          />
+          <KpiCard
+            title="Total Spend"
+            value={
+              isLoadingOverview
+                ? 'Loading...'
+                : formatINR(overview?.totalSpend ?? 0)
+            }
+          />
+          <KpiCard
+            title="Avg Cost / Shipment"
+            value={
+              isLoadingOverview
+                ? 'Loading...'
+                : formatINR(overview?.avgCostPerShipment ?? 0)
+            }
+          />
+          <KpiCard
+            title="Estimated Savings"
+            value={
+              isLoadingOverview
+                ? 'Loading...'
+                : formatINR(overview?.totalSavings ?? 0)
+            }
+            tone={
+              (overview?.totalSavings ?? 0) >= 0 ? 'green' : 'red'
+            }
+          />
         </div>
 
         {isLoadingOverview ? (
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-12 text-center text-slate-600">Loading your dashboard...</div>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-12 text-center text-slate-600">
+            Loading your dashboard...
+          </div>
         ) : isEmpty ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-white p-8 text-center text-slate-600">
             <p className="mb-2 font-semibold">No activity yet</p>
-            <p className="text-sm">Your dashboard will populate when you create shipments or enable anonymised data contributions. Try calculating freight or adding a vendor to get started.</p>
+            <p className="text-sm">
+              Your dashboard will populate when you create shipments or
+              enable anonymised data contributions. Try calculating
+              freight or adding a vendor to get started.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="col-span-2 bg-white border rounded-lg p-6">
-              <h3 className="text-sm font-medium text-slate-700 mb-3">Savings over time</h3>
-              <div className="h-44 flex items-center justify-center text-sm text-slate-400">(Chart placeholder)</div>
+              <h3 className="text-sm font-medium text-slate-700 mb-3">
+                Savings over time
+              </h3>
+              <div className="h-44 flex items-center justify-center text-sm text-slate-400">
+                (Chart placeholder)
+              </div>
             </div>
 
             <div className="bg-white border rounded-lg p-6">
-              <h3 className="text-sm font-medium text-slate-700 mb-3">Data source</h3>
-              <p className="text-sm text-slate-600">Community baseline shown only when sampleCount ≥ 3. Current sample count: <span className="font-medium ml-1">{overview?.sampleCount ?? 0}</span></p>
+              <h3 className="text-sm font-medium text-slate-700 mb-3">
+                Data source
+              </h3>
+              <p className="text-sm text-slate-600">
+                Community baseline shown only when sampleCount ≥ 3.
+                Current sample count:
+                <span className="font-medium ml-1">
+                  {overview?.sampleCount ?? 0}
+                </span>
+              </p>
             </div>
           </div>
         )}
 
         <div className="mt-8 text-center">
-          <Link to="/" className="text-blue-600 hover:underline">← Back to Calculator</Link>
+          <Link
+            to="/"
+            className="text-blue-600 hover:underline"
+          >
+            ← Back to Calculator
+          </Link>
         </div>
       </div>
     </div>
   );
 };
 
-function KpiCard({ title, value, tone = 'neutral' }: { title: string; value: React.ReactNode; tone?: 'neutral' | 'green' | 'red' }) {
-  const toneClass = tone === 'green' ? 'text-emerald-600' : tone === 'red' ? 'text-rose-600' : 'text-slate-800';
+function KpiCard({
+  title,
+  value,
+  tone = 'neutral',
+}: {
+  title: string;
+  value: React.ReactNode;
+  tone?: 'neutral' | 'green' | 'red';
+}) {
+  const toneClass =
+    tone === 'green'
+      ? 'text-emerald-600'
+      : tone === 'red'
+      ? 'text-rose-600'
+      : 'text-slate-800';
   return (
     <div className="bg-white border rounded-lg p-4 shadow-sm">
       <div className="text-xs text-slate-500">{title}</div>
-      <div className={`mt-2 text-xl font-semibold ${toneClass}`}>{value}</div>
+      <div className={`mt-2 text-xl font-semibold ${toneClass}`}>
+        {value}
+      </div>
     </div>
   );
 }
