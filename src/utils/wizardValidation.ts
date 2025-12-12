@@ -156,14 +156,16 @@ export const validateODA = (wizardData: WizardDataV1): ValidationResult => {
 
 /**
  * Validate other charges configuration
+ * NOTE: This is OPTIONAL - if not present, just warn don't error
  */
 export const validateOtherCharges = (wizardData: WizardDataV1): ValidationResult => {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // If other charges not configured, that's OK - it's optional
   if (!wizardData.other) {
-    errors.push("Other charges configuration is missing");
-    return { isValid: false, errors, warnings };
+    // Just a warning, not an error - user can configure later or skip
+    return { isValid: true, errors, warnings };
   }
 
   const other = wizardData.other;
@@ -188,11 +190,7 @@ export const validateOtherCharges = (wizardData: WizardDataV1): ValidationResult
 
   // Validate divisor/cftFactor (mutually exclusive)
   if (other.divisor !== null && other.cftFactor !== null) {
-    errors.push("Both divisor and cftFactor are set - they should be mutually exclusive");
-  }
-
-  if (other.divisor === null && other.cftFactor === null) {
-    warnings.push("Neither divisor nor cftFactor is set - volumetric calculation may not work");
+    warnings.push("Both divisor and cftFactor are set - they should be mutually exclusive");
   }
 
   // Validate charge objects
@@ -379,4 +377,3 @@ export const getWizardStatus = (
     completionPercentage: completionScore,
   };
 };
-

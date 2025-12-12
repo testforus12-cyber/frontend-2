@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import Cookies from 'js-cookie';
 import { persistDraft } from '../store/draftStore';
 // Hooks (keep your originals)
+import { useVendorAutofill } from '../hooks/useVendorAutofill';
+
 import { useVendorBasics } from '../hooks/useVendorBasics';
 import { usePincodeLookup } from '../hooks/usePincodeLookup';
 import { useVolumetric } from '../hooks/useVolumetric';
@@ -46,6 +48,16 @@ import isEmail from 'isemail';
 // ScrollToTop helper (smooth scroll to ref when `when` changes)
 import ScrollToTop from '../components/ScrollToTop'; // adjust path if needed
 
+import { debounce } from 'lodash';
+import { 
+  Search,
+  Building2,
+  Loader2,
+  ChevronDown,
+  CheckCircle2,
+  MapPin,
+  Tag
+} from 'lucide-react';
 // ============================================================================
 // CONFIG / HELPERS
 // ============================================================================
@@ -122,7 +134,33 @@ type ZonePriceMatrixLS = {
   priceMatrix: PriceMatrix;
   timestamp: string;
 };
-
+interface VendorSuggestion {
+  id: string;
+  displayName: string;
+  companyName: string;
+  legalCompanyName: string;
+  vendorCode: string;
+  vendorPhone: number | string;
+  vendorEmail: string;
+  contactPerson: string;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  primaryContactPhone: string;
+  gstNo: string;
+  subVendor: string;
+  address: string;
+  state: string;
+  city: string;
+  pincode: string | number;
+  mode: string;
+  serviceModes: string;
+  rating: number;
+  zones: string[];
+  zoneMatrixStructure: Record<string, Record<string, string>>;
+  volumetricUnit: string;
+  divisor: number;
+  cftFactor: number | null;
+}
 function getAuthToken(): string {
   return (
     Cookies.get('authToken') ||
@@ -222,7 +260,7 @@ export const AddVendor: React.FC = () => {
   const charges = useCharges();
 
   // Wizard storage hook
-  const { wizardData, isLoaded: wizardLoaded, clearWizard } = useWizardStorage();
+  const { wizardData, isLoaded: wizardLoaded, clearWizard, setWizardData } = useWizardStorage();
 
   // Page-level state
   const [transportMode, setTransportMode] = useState<'road' | 'air' | 'rail' | 'ship'>('road');
@@ -257,7 +295,128 @@ export const AddVendor: React.FC = () => {
   const [wizardStatus, setWizardStatus] = useState<WizardStatus | null>(null);
 
   const navigate = useNavigate();
+// ============================================================================
+// VENDOR AUTOCOMPLETE STATE
+// ============================================================================
+const [suggestions, setSuggestions] = useState<VendorSuggestion[]>([]);
+const [isSearching, setIsSearching] = useState(false);
+const [showDropdown, setShowDropdown] = useState(false);
+const [highlightedIndex, setHighlightedIndex] = useState(-1);
+const [isAutoFilled, setIsAutoFilled] = useState(false);
+const [autoFilledFromName, setAutoFilledFromName] = useState<string | null>(null);
+const [autoFilledFromId, setAutoFilledFromId] = useState<string | null>(null);
+const [legalCompanyNameInput, setLegalCompanyNameInput] = useState('');
+const dropdownRef = useRef<HTMLDivElement>(null);
+const abortControllerRef = useRef<AbortController | null>(null);
 
+// ----------------------------------------------------------------------------
+// Initialize vendor autofill helper (drop this after your hooks/state are defined)
+// ----------------------------------------------------------------------------
+const { applyVendorAutofill } = useVendorAutofill({
+  vendorBasics,
+  pincodeLookup,
+  volumetric,
+  setWizardData,               // from useWizardStorage()
+  setZpm,                      // state setter for zpm: const [zpm, setZpm] = useState(...)
+  setIsAutoFilled,             // state setter already defined in file
+  setAutoFilledFromName,       // state setter already defined in file
+  setAutoFilledFromId,         // state setter already defined in file
+  setWizardValidation,         // state setter already defined in file
+  setWizardStatus,             // state setter already defined in file
+  validateWizardData,          // imported utility function
+  getWizardStatus,             // imported utility function
+});
+
+// ============================================================================
+// VENDOR AUTOCOMPLETE FUNCTIONS
+// ============================================================================
+
+// Search function (debounced)
+const searchTransporters = useMemo(
+  () =>
+    debounce(async (query: string) => {
+      if (!query || query.length < 2) {
+        setSuggestions([]);
+        setIsSearching(false);
+        return;
+      }
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      setIsSearching(true);
+      
+      try {
+        const customerID = getCustomerIDFromToken();
+        if (!customerID) {
+          setSuggestions([]);
+          setIsSearching(false);
+          return;
+        }
+
+        const token = getAuthToken();
+        const url = `${API_BASE}/api/transporter/search-transporters?query=${encodeURIComponent(query)}&customerID=${encodeURIComponent(customerID)}&limit=10`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          signal: abortControllerRef.current.signal
+        });
+
+        if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+
+        const data = await response.json();
+        
+        if (data.success && data.data?.length > 0) {
+          setSuggestions(data.data);
+          setShowDropdown(true);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('[Autocomplete] Search error:', error);
+          setSuggestions([]);
+        }
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300),
+  []
+);
+
+// Auto-select handler
+const handleVendorAutoSelect = useCallback((vendor: VendorSuggestion) => {
+  console.log('[AutoFill] selecting vendor', vendor);
+
+  // Use the shared autofill logic; blank cells default to '' (editable)
+  applyVendorAutofill(vendor, { blankCellValue: '' });
+
+  // UI bookkeeping (toasts + dropdown cleanup)
+  setIsAutoFilled(true);
+  setAutoFilledFromName(vendor.displayName || vendor.companyName || vendor.legalCompanyName || '');
+  setAutoFilledFromId(vendor.id || null);
+  setShowDropdown(false);
+  setSuggestions([]);
+  setHighlightedIndex(-1);
+
+  toast.success(
+    `Auto-filled from "${vendor.displayName || vendor.companyName}". ${vendor.zones?.length || 0} zones loaded (prices blank).`,
+    { duration: 5000 }
+  );
+}, [applyVendorAutofill]);
+
+// Clear auto-fill
+const clearAutoFill = useCallback(() => {
+  setIsAutoFilled(false);
+  setAutoFilledFromName(null);
+  setAutoFilledFromId(null);
+}, []);
   // Prevent double-run in React StrictMode / dev double-mounts
   const mountRan = useRef(false);
 
@@ -866,10 +1025,14 @@ useEffect(() => {
 
 
     // Use wizard data if available, fallback to legacy localStorage
+    // Use wizard data if available, fallback to legacy localStorage
     const priceChart = (wizardData?.priceMatrix || zpm?.priceMatrix || {}) as PriceMatrix;
     
-    // ✅ FIX 7: Extract selected zones from wizard
-    const selectedZones = wizardData?.selectedZones || zpm?.selectedZones || [];
+    // ✅ Extract selected zones from wizard (just zone codes)
+    const selectedZones = wizardData?.zones?.map((z: any) => z.zoneCode) || zpm?.selectedZones || [];
+    
+    // ✅ NEW: Extract full zone configurations with city mappings for DB storage
+    const zoneConfigurations = wizardData?.zones || [];
 
     const pincodeStr = String(geo.pincode ?? '')
       .replace(/\D+/g, '')
@@ -897,8 +1060,10 @@ useEffect(() => {
       rating: rating,                     // ✅ NEW - at root level
       subVendor: subVendor,               // ✅ NEW - at root level (not nested)
       selectedZones: selectedZones,       // ✅ NEW - at root level
+      zoneConfigurations: zoneConfigurations,  // ✅ ADD THIS LINE
       human: { name, displayName, primaryCompanyName },  // Removed subVendor from here
       prices: { priceRate, priceChart },
+      zones: zoneConfigurations,  // ✅ ADD THIS LINE TOO
       
       invoiceValueCharges: {
         enabled: invoiceAutoEnabled,
@@ -975,6 +1140,7 @@ useEffect(() => {
       fd.append('rating', String(payloadForApi.rating));                    // ✅ FIXED - use actual rating
       fd.append('subVendor', payloadForApi.subVendor || '');                // ✅ NEW
       fd.append('selectedZones', JSON.stringify(payloadForApi.selectedZones)); // ✅ NEW
+      fd.append('zoneConfigurations', JSON.stringify(payloadForApi.zoneConfigurations));
       fd.append('priceRate', JSON.stringify(payloadForApi.prices.priceRate));
       fd.append('priceChart', JSON.stringify(payloadForApi.prices.priceChart));
       if (priceChartFile) fd.append('priceChart', priceChartFile);
@@ -1046,7 +1212,11 @@ useEffect(() => {
       setWizardValidation(null);
       setWizardStatus(null);
       setRefreshTrigger((x) => x + 1);
-
+      setLegalCompanyNameInput('');
+      setIsAutoFilled(false);
+      setAutoFilledFromName(null);
+      setAutoFilledFromId(null);
+      setSuggestions([]);
       // trigger smooth scroll to top (ScrollToTop listens on this)
       setScrollKey(Date.now());
     } catch (err) {
@@ -1082,6 +1252,11 @@ useEffect(() => {
     setInvoiceMinAmount('');
     setInvoiceUseMax(false);
     setInvoiceManualOverride(false);
+    setLegalCompanyNameInput('');
+    setIsAutoFilled(false);
+    setAutoFilledFromName(null);
+    setAutoFilledFromId(null);
+    setSuggestions([]);
     clearDraft();
     clearWizard(); // ADD THIS
     toast.success('Form reset', { duration: 1200 });
@@ -1190,6 +1365,87 @@ useEffect(() => {
           <div className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm overflow-hidden">
             <div className="grid grid-cols-1 gap-0 divide-y divide-slate-200">
               <div className="p-6 md:p-8">
+                {/* VENDOR AUTOCOMPLETE SECTION */}
+<div className="p-6 md:p-8 bg-gradient-to-r from-blue-50 to-slate-50">
+  <div className="flex items-center gap-2 mb-4">
+    <Search className="w-5 h-5 text-blue-600" />
+    <h3 className="text-lg font-semibold text-slate-900">Quick Lookup</h3>
+    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">NEW</span>
+  </div>
+  
+  <div ref={dropdownRef} className="relative max-w-2xl">
+    <div className="relative">
+      <input
+        type="text"
+        value={legalCompanyNameInput}
+        onChange={(e) => {
+          setLegalCompanyNameInput(e.target.value);
+          setIsAutoFilled(false);
+          searchTransporters(e.target.value);
+        }}
+        onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+        onKeyDown={(e) => {
+          if (!showDropdown || !suggestions.length) return;
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setHighlightedIndex(p => p < suggestions.length - 1 ? p + 1 : 0);
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlightedIndex(p => p > 0 ? p - 1 : suggestions.length - 1);
+          } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+            e.preventDefault();
+            handleVendorAutoSelect(suggestions[highlightedIndex]);
+          } else if (e.key === 'Escape') {
+            setShowDropdown(false);
+          }
+        }}
+        placeholder="Search existing transporters or enter new company name..."
+        className={`w-full px-4 py-3.5 pl-12 pr-10 border-2 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${isAutoFilled ? 'border-green-400 bg-green-50' : 'border-slate-300 hover:border-slate-400'}`}
+      />
+      <div className="absolute left-4 top-1/2 -translate-y-1/2">
+        {isSearching ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : isAutoFilled ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Search className="w-5 h-5 text-slate-400" />}
+      </div>
+    </div>
+    
+    {showDropdown && suggestions.length > 0 && (
+      <div className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-2xl overflow-hidden max-h-72">
+        <div className="px-4 py-2 border-b bg-slate-50 text-xs font-semibold text-slate-600">
+          {suggestions.length} transporter{suggestions.length !== 1 ? 's' : ''} found
+        </div>
+        <div className="overflow-y-auto max-h-60">
+          {suggestions.map((v, i) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => handleVendorAutoSelect(v)}
+              onMouseEnter={() => setHighlightedIndex(i)}
+              className={`w-full px-4 py-3 text-left flex items-center gap-3 border-b border-slate-100 ${highlightedIndex === i ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+            >
+              <Building2 className={`w-8 h-8 p-1.5 rounded-lg text-white ${highlightedIndex === i ? 'bg-blue-500' : 'bg-slate-400'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-900 truncate">{v.legalCompanyName || v.companyName}</p>
+                <div className="flex gap-1.5 mt-1">
+                  {v.vendorCode && <span className="text-xs px-1.5 py-0.5 bg-slate-100 rounded">{v.vendorCode}</span>}
+                  {v.zones?.length > 0 && <span className="text-xs px-1.5 py-0.5 bg-green-50 text-green-700 rounded">{v.zones.length} zones</span>}
+                </div>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded ${highlightedIndex === i ? 'bg-blue-500 text-white' : 'bg-slate-100'}`}>Select</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+  
+  {!isAutoFilled && <p className="mt-2 text-xs text-slate-500">💡 Type 2+ characters to search existing transporters</p>}
+  
+  {isAutoFilled && (
+    <div className="mt-3 flex items-center justify-between bg-green-100 border border-green-300 px-4 py-3 rounded-xl text-green-800">
+      <span><CheckCircle2 className="w-4 h-4 inline mr-2" />Auto-filled from <strong>{autoFilledFromName}</strong>. Fill in prices.</span>
+      <button type="button" onClick={clearAutoFill} className="text-xs underline">Clear</button>
+    </div>
+  )}
+</div>
                 <CompanySection
                   vendorBasics={vendorBasics}
                   pincodeLookup={pincodeLookup}

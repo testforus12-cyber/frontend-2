@@ -41,7 +41,7 @@ export interface VendorBasicsErrors {
   primaryContactEmail?: string;
   address?: string;
   // newly tracked errors
-  transportMode?: string; // <--- ADDED THIS
+  transportMode?: string;
   serviceMode?: string;
   companyRating?: string;
 }
@@ -55,7 +55,11 @@ export interface UseVendorBasicsReturn {
   validateAll: () => boolean;
   reset: () => void;
   loadFromDraft: (draft: Partial<VendorBasics>) => void;
-  
+
+  // 🔥 NEW: bulk setter for autofill (Quick Lookup, etc.)
+  setBasics: (
+    updater: VendorBasics | ((prev: VendorBasics) => VendorBasics)
+  ) => void;
 }
 
 // =============================================================================
@@ -115,6 +119,28 @@ export const useVendorBasics = (
       onUpdate(basics);
     }
   }, [basics, onUpdate]);
+
+  /**
+   * 🔥 NEW: Bulk setter so we can update many fields at once
+   * Used by Quick Lookup autofill, but keeps old behavior intact.
+   */
+  const setBasicsBulk = useCallback(
+    (updater: VendorBasics | ((prev: VendorBasics) => VendorBasics)) => {
+      setBasics((prev) => {
+        const next =
+          typeof updater === 'function'
+            ? (updater as (p: VendorBasics) => VendorBasics)(prev)
+            : updater;
+
+        emitDebug('BASICS_BULK_SET', next);
+        return next;
+      });
+
+      // Optional: clear all field errors on bulk set
+      setErrors({});
+    },
+    []
+  );
 
   /**
    * Set a single field value
@@ -185,13 +211,11 @@ export const useVendorBasics = (
           error = validateAddress(basics.address);
           break;
 
-        // --- ADDED THIS BLOCK ---
         case 'transportMode':
           if (!basics.transportMode) {
             error = 'Transport Mode is required';
           }
           break;
-        // ------------------------
 
         // NEW: basic validation for serviceMode & companyRating
         case 'serviceMode': {
@@ -236,15 +260,15 @@ export const useVendorBasics = (
    */
   const validateAll = useCallback((): boolean => {
     const fields: (keyof VendorBasics)[] = [
-    'legalCompanyName',
-    'contactPersonName',
-    'vendorPhoneNumber',
-    'vendorEmailAddress',
-    'subVendor',
-    'vendorCode',
-    'address',
-    'transportMode',
-    'serviceMode',
+      'legalCompanyName',
+      'contactPersonName',
+      'vendorPhoneNumber',
+      'vendorEmailAddress',
+      'subVendor',
+      'vendorCode',
+      'address',
+      'transportMode',
+      'serviceMode',
     ];
 
     // Validate GSTIN if present
@@ -253,7 +277,10 @@ export const useVendorBasics = (
     }
 
     // companyRating is optional — validate only if present
-    if ((basics as any).companyRating !== null && (basics as any).companyRating !== undefined) {
+    if (
+      (basics as any).companyRating !== null &&
+      (basics as any).companyRating !== undefined
+    ) {
       fields.push('companyRating');
     }
 
@@ -304,13 +331,11 @@ export const useVendorBasics = (
           error = validateAddress(basics.address);
           break;
 
-        // --- ADDED THIS BLOCK ---
         case 'transportMode':
           if (!basics.transportMode) {
             error = 'Please select a transport mode';
           }
           break;
-        // ------------------------
 
         case 'serviceMode': {
           const v = (basics as any).serviceMode;
@@ -377,5 +402,6 @@ export const useVendorBasics = (
     validateAll,
     reset,
     loadFromDraft,
+    setBasics: setBasicsBulk, // 👈 NEW bulk setter exposed to AddVendor
   };
 };
